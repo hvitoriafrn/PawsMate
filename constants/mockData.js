@@ -1,4 +1,5 @@
-// Mock users for development
+// Mock users for development, this is so there's something visible in the development of the app
+// An array of user objects with relevant details
 export const mockUsers = [
   {
     id: '1',

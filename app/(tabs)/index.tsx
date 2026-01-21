@@ -1,98 +1,157 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// Import necessary modules and components
+import { auth } from '@/config/firebase';
+import { mockEvents, mockUsers } from '@/constants/mockData';
+import { useUserStore } from '@/store/userStore';
+import { useRouter } from 'expo-router';
+import { signOut } from 'firebase/auth';
+import {
+  Alert, ScrollView,
+  StyleSheet, Text, TouchableOpacity, View
+} from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
-
+// define the component for the Home Screen
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const { user, logout } = useUserStore();
+  const router = useRouter();
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  // Handles the confirmation pop out for logging out
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut(auth);
+              logout();
+              router.replace('/auth/landingPage');
+            } catch (error: any) {
+              Alert.alert('Error', error.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+  // Render the home screen
+  return (
+    <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>Welcome to PawsMate! 🐾</Text>
+          {user && <Text style={styles.email}>Logged in as: {user.email}</Text>}
+        </View>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+      
+      {/* Section to show nearby pet lovers*/}
+       
+      <Text style={styles.sectionTitle}>Nearby Pet Lovers</Text>
+      {mockUsers.map(user => (
+        <View key={user.id} style={styles.card}>
+          <Text style={styles.name}>{user.name}</Text>
+          <Text style={styles.bio}>{user.bio}</Text>
+          <Text style={styles.distance}>{user.distance} away</Text>
+        </View>
+      ))}
+
+       {/* Section for upcoming events  */}
+      <Text style={styles.sectionTitle}>Upcoming Events</Text>
+      {mockEvents.map(event => (
+        <View key={event.id} style={styles.card}>
+          <Text style={styles.name}>{event.title}</Text>
+          <Text style={styles.bio}>{event.date} at {event.time}</Text>
+          <Text style={styles.distance}>{event.attendees} attending</Text>
+        </View>
+      ))}
+    </ScrollView>
   );
 }
 
+// Styles for the Home Screen component
+
 const styles = StyleSheet.create({
-  titleContainer: {
+  // main container style
+  container: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: '#fff',
+  },
+  
+  // header section
+  header: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+    marginTop: 20,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+
+  // title 
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+
+  // email
+  email: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 5,
+  },
+
+  // logout button
+  logoutButton: {
+    backgroundColor: '#ff6b6b',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+
+  logoutText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+
+  // section titles
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+
+  // card style for user or event
+  card: {
+    backgroundColor: '#f5f5f5',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+
+  // name 
+  name: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+
+  // bio
+  bio: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+  },
+
+  //distance
+  distance: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 5,
   },
 });

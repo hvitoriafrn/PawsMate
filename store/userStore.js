@@ -1,13 +1,25 @@
+// Import Zustand's 'create' function. 
 import { create } from 'zustand';
 
-// This store manages user-related data across the app
 export const useUserStore = create((set) => ({
   // Current logged-in user
   user: null,
   
-  // Function to set/update user
-  setUser: (userData) => set({ user: userData }),
+  // Loading state
+  isLoading: false,
   
-  // Function to log out
-  logout: () => set({ user: null }),
+  // Error state
+  error: null,
+  
+  // Set user after login
+  setUser: (userData) => set({ user: userData, error: null }),
+  
+  // Set loading state
+  setLoading: (loading) => set({ isLoading: loading }),
+  
+  // Set error
+  setError: (error) => set({ error }),
+  
+  // Logout
+  logout: () => set({ user: null, error: null }),
 }));

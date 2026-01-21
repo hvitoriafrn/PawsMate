@@ -1,24 +1,79 @@
+// import the necessary modules and components
+import { auth } from '@/config/firebase';
+import { useUserStore } from '@/store/userStore';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import * as SplashScreen from 'expo-splash-screen';
+import { onAuthStateChanged } from 'firebase/auth';
+import { useEffect } from 'react';
+import { useColorScheme } from 'react-native';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+export {
+  // Catches crashes and displays an error screen
+  ErrorBoundary
+} from 'expo-router';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  // When the app loads, it will navigate to the landing page first
+  initialRouteName: 'auth/landingPage',
 };
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+// Prevent the splash screen from auto-hiding before asset loading is complete
+SplashScreen.preventAutoHideAsync();
 
+// Main layout component with font loading and splash screen handling
+export default function RootLayout() {
+  const [loaded, error] = useFonts({
+    ...FontAwesome.font,
+  });
+
+  // If the font loading fails, throw the error
+  useEffect(() => {
+    if (error) throw error;
+  }, [error]);
+
+  // Hide the splash screen once fonts are loaded
+  useEffect(() => {
+    if (loaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [loaded]);
+
+  // If fonts are not loaded yet, render nothing
+  if (!loaded) {
+    return null;
+  }
+ 
+  // Render the main navigation layout
+  return <RootLayoutNav />;
+}
+
+// This is the actual navigation layout structure
+function RootLayoutNav() {
+  const colorScheme = useColorScheme(); // checks the device's color scheme (dark or light mode enabled)
+  const { setUser } = useUserStore(); // get the setUser function from the user store
+
+  // Listen to authentication state changes and saves it to the store so the app knows the login state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+    });
+
+    // Cleanup the listener on unmount, helps prevent memory leaks
+    return unsubscribe;
+  }, []);
+
+  // applies the appropriate theme based on the device's color scheme
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+      <Stack> 
+        <Stack.Screen name="auth/landingPage" options={{ headerShown: false }} />
+        <Stack.Screen name="auth/login" options={{ title: 'Sign In' }} />
+        <Stack.Screen name="auth/signup" options={{ title: 'Create Account' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
-      <StatusBar style="auto" />
     </ThemeProvider>
   );
 }
