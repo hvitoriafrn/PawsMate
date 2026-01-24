@@ -1,6 +1,6 @@
 // Import necessary modules and components
 import { auth } from '@/config/firebase';
-import { mockEvents, mockUsers } from '@/constants/mockData';
+import { mockUsers } from '@/constants/mockData';
 import { useUserStore } from '@/store/userStore';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
@@ -9,7 +9,7 @@ import {
   StyleSheet, Text, TouchableOpacity, View
 } from 'react-native';
 
-// define the component for the Home Screen
+// Define the component for the Home Screen
 export default function HomeScreen() {
   const { user, logout } = useUserStore();
   const router = useRouter();
@@ -57,17 +57,7 @@ export default function HomeScreen() {
         <View key={user.id} style={styles.card}>
           <Text style={styles.name}>{user.name}</Text>
           <Text style={styles.bio}>{user.bio}</Text>
-          <Text style={styles.distance}>{user.distance} away</Text>
-        </View>
-      ))}
-
-       {/* Section for upcoming events  */}
-      <Text style={styles.sectionTitle}>Upcoming Events</Text>
-      {mockEvents.map(event => (
-        <View key={event.id} style={styles.card}>
-          <Text style={styles.name}>{event.title}</Text>
-          <Text style={styles.bio}>{event.date} at {event.time}</Text>
-          <Text style={styles.distance}>{event.attendees} attending</Text>
+          <Text style={styles.distance}>{user.location} away</Text>
         </View>
       ))}
     </ScrollView>
