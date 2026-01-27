@@ -220,7 +220,6 @@ export const getPetsByOwnerId = async (ownerId: string): Promise<Pet[]> => {
 };
 
 // Creates likes
-
 export const createLike = async (
     userId: string, 
     petId: string, 
@@ -233,7 +232,6 @@ export const createLike = async (
         const likesRef = collection(db, COLLECTIONS.LIKES);
 
         // Building the like data object
-
         const likeData: Omit<Like, 'id'> = {
             userId, 
             petId,
@@ -261,7 +259,6 @@ export const createLike = async (
 
 
 // Prevent showing pet a user has already liked or passed on
-
 export const hasUserInteractedWithPet = async (
     userId: string,
     petId: string
@@ -294,11 +291,9 @@ export const hasUserInteractedWithPet = async (
 
 
 // Timestamp to date converter 
-
 export const TimestampToDate = (timestamp: any): Date => {
 
     // Check if timestamp exists and has the toDate method
-
     if (timestamp && timestamp.toDate) {
         // then convert the timestamp to Date
         return timestamp.toDate();

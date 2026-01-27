@@ -1,214 +1,331 @@
-// Import React and necessary components
-import React, { useState } from 'react';
+// Explore screen that shows all active pets available for matching for the like / pass
+
+// Import necessary modules
+import { useActivePets } from '@/hooks/firestore';
+import { getUserById } from '@/services/firebase/firestoreService';
+import { useUserStore } from '@/store/userStore'; // this gets the current logged in user
+import { User } from '@/types/database';
+import React, { useEffect, useState } from 'react';
 import {
-    Dimensions, Image, ScrollView, StyleSheet,
-    Text, TouchableOpacity, View
+    ActivityIndicator,
+    Dimensions,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
-// Import our types and data
-import {
-    getOwnerForPet,
-    mockPets
-} from '@/constants/mockData';
-
-// Get screen width for responsive design
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Main Explore Screen Component
 export default function ExploreScreen() {
-    
-    // Which pet card we're currently showing
+
+    // The pet card currently on display
     const [currentIndex, setCurrentIndex] = useState<number>(0);
     
-    // Whether health info section is expanded
+    // Pet health info section, is it expanded?
     const [showHealthInfo, setShowHealthInfo] = useState<boolean>(false);
-    
-    // Get current pet and owner based on index
-    const currentPet = mockPets[currentIndex];
-    const currentOwner = currentPet ? getOwnerForPet(currentPet) : undefined;
-    
-   
-    // Handlers for passing and liking pets
-    const handlePass = () => {
-        console.log('Passed on:', currentPet?.name);
-        setCurrentIndex(prev => prev + 1);
-        setShowHealthInfo(false); // Reset health info when moving to next card
+
+    // Get the owner of the current pet on display
+    const [currentOwner, setCurrentOwner] = useState<User | null>(null);
+
+    const [ownerLoading, setOwnerLoading] = useState<boolean>(false);
+
+
+    // Get all the active pets from Firestore
+    const { pets, loading, error, refetch } = useActivePets();
+
+    // Get the current logged in users from Zustand 
+    const { user } = useUserStore();
+
+    const currentPet = pets[currentIndex];
+
+    // Function for when pet changes, the owner is fetched for that pet (changing it too)
+    useEffect(() => {
+        if (currentPet) {
+            getOwner();
+        }
+    }, [currentPet?.id]);
+
+    // Get owner of the current pet when pet changes
+    const getOwner = async () => {
+        if (!currentPet) return;
+
+        try {
+            setOwnerLoading(true);
+
+            // Get user from Firestore
+            const owner = await getUserById(currentPet.ownerId);
+            setCurrentOwner(owner);
+
+        } catch (error) {
+            console.error('Error getting pet owner: ', error);
+            setCurrentOwner(null);
+
+        } finally {
+            setOwnerLoading(false);
+        }
     };
-    
-    // Like handler
-    const handleLike = () => {
-        console.log('Liked:', currentPet?.name);
-        setCurrentIndex(prev => prev + 1);
-        setShowHealthInfo(false); // Reset health info when moving to next card
+
+
+    // Handle the pass option (save the pass to database and move to next pet)
+    const handlePass = async () => {
+        if (!currentPet || !user) {
+            console.log('No pets found');
+            return;
+        }
+
+        try {
+            console.log('Passed on: ', currentPet.name);
+
+            // await createLike(
+            //     user.uid,
+            //     currentPet.id,
+            //     currentPet.ownerId,
+            //     'yourPetId',
+            //     'pass',
+            // );
+
+            // Moves to next pet
+            setCurrentIndex(prev => prev + 1);
+
+            // Reset health info expansion when moves to next pet
+            setShowHealthInfo(false);
+
+        } catch (error) {
+            console.error('Error saving the pass: ', error);
+        }
     };
-    
-    // Toggle health info section
+
+    // Handle the like functionality
+
+    const handleLike = async() => {
+        if (!currentPet || !user) {
+            console.log('No pets found');
+            return;
+        }
+
+        try {
+            console.log('You liked: ', currentPet.name);
+
+            // await createLike(
+            //     user.uid,
+            //     currentPet.id,
+            //     currentPet.ownerId,
+            //     'yourPetId',
+            //     'like',
+            // );
+
+            // moves to next pet
+            setCurrentIndex(prev => prev + 1);
+
+            // Reset health info
+            setShowHealthInfo(false);
+
+        } catch (error) {
+            console.error('Error saving the like: ', error);
+        }
+    };
+
+    // Toggle health info section open / closed 
     const toggleHealthInfo = () => {
-        setShowHealthInfo(prev => !prev);
-    };
-    
-    // Reset explore to the beginning
-    const resetExplore = () => {
-        setCurrentIndex(0);
-        setShowHealthInfo(false);
-    };
-    
-    // Render the component
+        setShowHealthInfo(prev => !prev);        
+    }; 
+
+    // 
+
     return (
-        <View style={styles.container}>
-            
-            {/* The title*/}
+        <View style ={styles.container}>
+
             <View style={styles.header}>
-                <Text style={styles.title}>Discover Pets</Text>
+                <Text style={styles.title}> Discover Pets</Text>
             </View>
-            
-            {/* Card display area */}
+
+            {/* content area */}
             <ScrollView 
                 style={styles.scrollContainer}
-                contentContainerStyle={styles.cardContainer}
-                showsVerticalScrollIndicator={false}
-            >
-                {currentPet && currentOwner ? (
-                    <View style={styles.card}>
-                        
-                        {/* Photo of the pet */}
-                        <View style={styles.photoContainer}>
-                            <Image 
-                                source={{ uri: currentPet.photo }} 
-                                style={styles.photo}
-                                resizeMode="cover"
-                            />
-                            
-                            {/* Verified badge/text*/}
-                            {currentPet.verification.verified && (
-                                <View style={styles.verifiedBadge}>
-                                    <Text style={styles.verifiedText}>✓ Verified</Text>
-                                </View>
-                            )}
-                            
-                            {/* Pet info overlay */}
-                            <View style={styles.petInfoOverlay}>
-                                <Text style={styles.petName}>
-                                    {currentPet.name}, {currentPet.age}
-                                </Text>
-                                <Text style={styles.petDetails}>
-                                    {currentPet.breed} • {currentPet.gender} • {currentPet.size}
-                                </Text>
-                                <Text style={styles.distance}>📍 3 miles away</Text>
-                            </View>
+                contentContainerStyle = {styles.cardContainer}
+                showsVerticalScrollIndicator = {false}
+                >
+                    {loading ? (
+                        <View style={styles.loadingState}>
+                            <ActivityIndicator size = "large" color="#10b981"/>
+                            <Text style={styles.loadingText}>Loading pets...</Text>
                         </View>
-                        
-                        {/* Personality traits */}
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Personality & Traits</Text>
-                            <View style={styles.tagsContainer}>
-                                {currentPet.personalityTraits.map((trait, index) => (
-                                    <View key={index} style={styles.personalityTag}>
-                                        <Text style={styles.personalityTagText}>{trait}</Text>
+
+                    ) : /* Error state */
+                        error ? (
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyStateTitle}> Error </Text>
+                                <Text style={styles.emptyStateText}>{error}</Text>
+                                <TouchableOpacity
+                                    style={styles.resetButton}
+                                    onPress={refetch} 
+                                    >
+                                        <Text style={styles.resetButtonText}> Try Again </Text>
+                                    </TouchableOpacity>
+                            </View>
+
+                        ) : // Show current pet
+                        currentPet && currentOwner && !ownerLoading ? (
+                            <View style = {styles.card}>
+
+                                <View style={styles.photoContainer}>
+                                <Image 
+                                    source={{ uri: currentPet.photo }}
+                                    style={styles.photo}
+                                    resizeMode= "cover"
+                                    />
+                                    {currentPet.verification.verified && (
+                                        <View style={styles.verifiedBadge}>
+                                            <Text style={styles.verifiedText}>✓ Verified</Text>
                                     </View>
-                                ))}
-                            </View>
-                        </View>
-                        
-                        {/* Looking for section */}
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Looking For</Text>
-                            <View style={styles.tagsContainer}>
-                                {currentPet.lookingFor.map((item, index) => (
-                                    <View key={index} style={styles.lookingForTag}>
-                                        <Text style={styles.lookingForTagText}>{item}</Text>
-                                    </View>
-                                ))}
-                            </View>
-                        </View>
-                        
-                        {/* Collapsible Health Information */}
-                        <View style={styles.section}>
-                            <TouchableOpacity 
-                                style={styles.healthHeader}
-                                onPress={toggleHealthInfo}
-                            >
-                                <Text style={styles.sectionTitle}>Health Information</Text>
-                                <Text style={styles.expandIcon}>
-                                    {showHealthInfo ? '▲' : '▼'}
-                                </Text>
-                            </TouchableOpacity>
-                            
-                            {showHealthInfo && (
-                                <View style={styles.healthContent}>
-                                    <Text style={styles.healthText}>
-                                        {currentPet.healthInfo.vaccinated ? '✓' : '○'} Vaccinated
-                                    </Text>
-                                    <Text style={styles.healthText}>
-                                        {currentPet.healthInfo.spayedNeutered ? '✓' : '○'} Spayed/Neutered
-                                    </Text>
-                                    {currentPet.healthInfo.healthNotes && (
-                                        <Text style={styles.healthNotes}>
-                                            {currentPet.healthInfo.healthNotes}
+                                    )}
+                                    
+                                    {/* Pet Info Overlay */}
+                                    <View style={styles.petInfoOverlay}>
+                                        <Text style={styles.petName}>
+                                            {currentPet.name}, {currentPet.age}
                                         </Text>
+
+                                        <Text style={styles.petDetails}>
+                                            {currentPet.breed} • {currentPet.gender} • {currentPet.size}
+                                        </Text>
+                                        <Text style={styles.distance}>
+                                            📍 {currentOwner.location}
+                                        </Text>
+                                    </View>
+                                </View>
+                        
+                                {/* Personality Traits Section */}
+                                <View style={styles.section}>
+                                    <Text style={styles.sectionTitle}> Pawsonality & Traits</Text>
+                                    <View style={styles.tagsContainer}>
+                                        {currentPet.personalityTraits.map((trait,index) => (
+                                            <View key={index} style={styles.personalityTag}>
+                                                <Text style={styles.personalityTagText}>{trait}</Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                </View>
+                                
+                                {/* Looking for */}
+                                <View style={styles.section}>
+                                    <Text style={styles.sectionTitle}> Looking For</Text>
+                                    <View style={styles.tagsContainer}>
+                                        {currentPet.lookingFor.map((item, index) => (
+                                            <View key={index} style={styles.lookingForTag}>
+                                                <Text style={styles.lookingForTagText}>{item}</Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                </View>
+
+
+                                {/* Health info */}
+                                <View style={styles.section}>
+                                    <TouchableOpacity
+                                        style={styles.healthHeader}
+                                        onPress={toggleHealthInfo}
+                                    >
+                                        <Text style={styles.sectionTitle}> Health Information</Text>
+                                        <Text style={styles.expandIcon}>
+                                            {showHealthInfo ? '▲' : '▼'}
+                                        </Text>
+                                    </TouchableOpacity>
+
+
+                                
+                                    {showHealthInfo && (
+                                        <View style={styles.healthContent}>
+                                            <Text style={styles.healthText}>
+                                                {currentPet.healthInfo.vaccinated ? '✓' : '○'} Vaccinated
+                                            </Text>
+                                            <Text style={styles.healthText}>
+                                                {currentPet.healthInfo.spayedNeutered ? '✓' : '○'} Spayed/Neutered
+                                            </Text>
+                                                {currentPet.healthInfo.healthNotes && (
+                                                    <Text style={styles.healthNotes}>
+                                                        {currentPet.healthInfo.healthNotes}
+                                                    </Text>
                                     )}
                                 </View>
                             )}
-                        </View>
-                        
-                        {/* Owner's info */}
-                        <View style={styles.ownerSection}>
-                            <Image 
-                                source={{ uri: currentOwner.profilePicture }} 
-                                style={styles.ownerPhoto}
+                     </View>
+                    
+                    {/* Owner Info */}
+                    <View style={styles.ownerSection}>
+                        <Image
+                            source={{ uri: currentOwner.profilePicture }}
+                            style={styles.ownerPhoto}
                             />
-                            <View style={styles.ownerInfo}>
-                                <Text style={styles.ownerLabel}>Owner</Text>
-                                <Text style={styles.ownerName}>{currentOwner.name}</Text>
-                            </View>
-                        </View>
-                        
-                        {/* Like or pass buttons */}
-                        <View style={styles.buttonsContainer}>
-                            <TouchableOpacity 
-                                style={styles.passButton}
-                                onPress={handlePass}
-                            >
-                                <Text style={styles.passIcon}>✕</Text>
-                            </TouchableOpacity>
-                            
-                            <TouchableOpacity 
-                                style={styles.likeButton}
-                                onPress={handleLike}
-                            >
-                                <Text style={styles.likeIcon}>♥</Text>
-                            </TouchableOpacity>
+                        < View style={styles.ownerInfo}>
+                            <Text style={styles.ownerLabel}> Owner </Text>
+                            <Text style={styles.ownerName}> {currentOwner.name} </Text>
                         </View>
                     </View>
-                ) : (
-                    // Empty state when no more pets are available
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyStateTitle}>No More Pets</Text>
-                        <Text style={styles.emptyStateText}>
-                            You've seen all available pets nearby!
-                        </Text>
-                        <TouchableOpacity 
-                            style={styles.resetButton}
-                            onPress={resetExplore}
+
+                    {/* Action buttons */}
+                    <View style={styles.buttonsContainer}>
+                        {/* Pass button*/}
+                        <TouchableOpacity
+                            style={styles.passButton}
+                            onPress={handlePass}
                         >
-                            <Text style={styles.resetButtonText}>Start Over</Text>
+                            <Text style={styles.passIcon}>x</Text>
+                        </TouchableOpacity>
+
+                        {/* Like button */}
+                        <TouchableOpacity
+                            style={styles.likeButton}
+                            onPress={handleLike}
+                        >
+                            <Text style={styles.likeIcon}> ♥ </Text>
                         </TouchableOpacity>
                     </View>
+                </View> 
+
+            ) : /* No more pets or owner loading */
+              ownerLoading ? (
+                    <View style={styles.loadingState}>
+                        <ActivityIndicator size="large" color="#10b981" />
+                        <Text style={styles.loadingText}>Loading owner info...</Text>
+                    </View>
+                ) : (
+                    //Empty state after there are no more new pets
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptyStateTitle}>You've seen all pets!</Text>
+                        <Text style={styles.emptyStateText}>
+                            You've seen all available pets nearby!
+                            Check back soon for new profiles!
+                        </Text>
+                        {/* Optional: Button to check if new pets were added */}
+                    
+                    <TouchableOpacity 
+                        style={styles.resetButton}
+                        onPress={refetch}  // ← Re-fetch from Firestore
+                    >
+                        <Text style={styles.resetButtonText}>Check for New Pets</Text>
+                    </TouchableOpacity>
+                </View>
                 )}
-            </ScrollView>
-        </View>
-    );
+    </ScrollView>
+    
+    </View>
+            
+     );
 }
 
-// Styles for the Explore Screen
+// Styles
+const styles = StyleSheet.create ({
 
-const styles = StyleSheet.create({
+    // Main container
     container: {
         flex: 1,
         backgroundColor: '#f9fafb',
     },
-    
-    // Header
+
     header: {
         padding: 16,
         paddingTop: 60,
@@ -217,14 +334,12 @@ const styles = StyleSheet.create({
         borderBottomColor: '#e5e7eb',
     },
     
-    // title
     title: {
         fontSize: 28,
         fontWeight: 'bold',
         color: '#111827',
     },
     
-    // Card container
     scrollContainer: {
         flex: 1,
     },
@@ -234,6 +349,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     
+    // Pet card styles
     card: {
         width: SCREEN_WIDTH - 32,
         backgroundColor: 'white',
@@ -247,7 +363,6 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     
-    // Photo section
     photoContainer: {
         width: '100%',
         height: 400,
@@ -259,7 +374,6 @@ const styles = StyleSheet.create({
         height: '100%',
     },
     
-    // verified badge
     verifiedBadge: {
         position: 'absolute',
         top: 16,
@@ -276,7 +390,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     
-    // Pet info overlay
     petInfoOverlay: {
         position: 'absolute',
         bottom: 0,
@@ -285,8 +398,7 @@ const styles = StyleSheet.create({
         padding: 16,
         backgroundColor: 'rgba(0,0,0,0.4)',
     },
-     
-    // Pet details
+    
     petName: {
         fontSize: 28,
         fontWeight: 'bold',
@@ -305,15 +417,14 @@ const styles = StyleSheet.create({
         color: 'white',
     },
     
-    // Sections
     section: {
-        padding: 12,
+        padding: 16,
         borderBottomWidth: 1,
         borderBottomColor: '#f0f0f0',
     },
     
     sectionTitle: {
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: '600',
         color: '#333',
     },
@@ -322,42 +433,39 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
-        marginTop: 8,
+        marginTop: 12,
     },
     
-    // Personality Tags 
     personalityTag: {
         backgroundColor: '#d1fae5',
-        paddingHorizontal: 10,
+        paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 16,
-        marginRight: -3,
-        marginBottom: 3,
+        marginRight: 8,
+        marginBottom: 8,
     },
     
     personalityTagText: {
         color: '#065f46',
-        fontSize: 12,
+        fontSize: 14,
         fontWeight: '500',
     },
     
-    // Looking for tags
     lookingForTag: {
         backgroundColor: '#fed7aa',
-        paddingHorizontal: 10,
+        paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 16,
-        marginRight: -3,
-        marginBottom: 3,
+        marginRight: 8,
+        marginBottom: 8,
     },
     
     lookingForTagText: {
         color: '#9a3412',
-        fontSize: 12,
+        fontSize: 14,
         fontWeight: '500',
     },
     
-    // Collapsible health info
     healthHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -370,11 +478,11 @@ const styles = StyleSheet.create({
     },
     
     healthContent: {
-        marginTop: 8,
+        marginTop: 12,
     },
     
     healthText: {
-        fontSize: 12,
+        fontSize: 14,
         color: '#6b7280',
         marginBottom: 8,
     },
@@ -383,10 +491,9 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#6b7280',
         fontStyle: 'italic',
-        marginTop: 3,
+        marginTop: 8,
     },
     
-    // Owner info section
     ownerSection: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -417,7 +524,6 @@ const styles = StyleSheet.create({
         color: '#333',
     },
     
-    // Buttons section (for pass and like)
     buttonsContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
@@ -448,8 +554,8 @@ const styles = StyleSheet.create({
     },
     
     likeButton: {
-        width: 70,
-        height: 70,
+        width: 80,
+        height: 80,
         borderRadius: 40,
         backgroundColor: '#10b981',
         alignItems: 'center',
@@ -466,7 +572,20 @@ const styles = StyleSheet.create({
         color: 'white',
     },
     
-    // Empty state for when there's no more pets
+    // Loading state
+    loadingState: {
+        alignItems: 'center',
+        padding: 32,
+        marginTop: 100,
+    },
+    
+    loadingText: {
+        fontSize: 16,
+        color: '#6b7280',
+        marginTop: 16,
+    },
+    
+    // Empty state
     emptyState: {
         alignItems: 'center',
         padding: 32,
