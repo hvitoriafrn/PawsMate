@@ -7,23 +7,30 @@ import {
     getPetsByOwnerId,
     getUserById
 } from '@/services/firebase/firestoreService';
+import { useUserStore } from '@/store/userStore';
 import { Pet, User } from '@/types/database';
+import { calculateDistance } from '@/utils/distance';
 import { useEffect, useState } from "react";
 
+
+interface UseActivePetsProps {
+    maxDistance?: number;
+}
 // Fetches all the active pets (this is for the Explore screen)
 
-export const useActivePets = () => {
+export const useActivePets = ({ maxDistance }: UseActivePetsProps = {}) => {
 
     // the list of Pets from the database
     const [pets, setPets] = useState<Pet[]>([]);
-
     const [loading, setLoading] = useState<boolean>(true);
-
     const [error, setError] = useState<string | null>(null);
+
+    const { user } = useUserStore();
+   
 
     useEffect(() => { 
         fetchPets(); // Gets the data immediately
-    }, []);
+    }, [maxDistance]);
 
     const fetchPets = async () => {
         try {
@@ -35,12 +42,54 @@ export const useActivePets = () => {
 
             const fetchedPets = await getActivePets();
 
-            // Save pets to state 
-            setPets(fetchedPets);
+           if (!maxDistance || !user?.geopoint) {
+                setPets(fetchedPets);
+                // Log to console 
+                console.log('Fetched ${fetchedPets.length} pets');
+                return;
+           }
+           
+           // filter pets by distance
+            const petsWithDistance = await Promise.all(
+                fetchedPets.map(async (pet) => {
+                    try {
+                        // Get the pet owner to access their location
+                        const owner = await getUserById(pet.ownerId);
+                        // If no location, include pet?
+                        if (!owner?.geopoint) {
+                            return { pet, distance: 0, includeAnyway: true};
+                        }
+                        
+                        const distance = calculateDistance(
+                            user.geopoint.latitude,
+                            user.geopoint.longitude,
+                            owner.geopoint.latitude,
+                            owner.geopoint.longitude
+                        );
 
-            // Log to console 
+                        return { pet, distance, includeAnyway: false};
+                    } catch (error) {
+                        console.error('Error getting owner for pet ${pet.id}:', error);
+                        // if there was an error getting the owner, show pet anyway
+                        return { pet, distance: 0, includeAnyway: true };
+                    }
+                })
+            );
 
-            console.log('Fetched ${fetchedPets.length} pets');
+            // Filter pet within the maxDistance radius
+            const filteredPets = petsWithDistance 
+            .filter(({ distance, includeAnyway }) =>
+                includeAnyway || distance <= maxDistance
+        )
+        .map(({ pet }) => pet);
+
+        // Save filtered pets to state
+        setPets(filteredPets);
+
+        // Log to console
+        console.log(
+            `Fetched ${filteredPets.length}/${fetchedPets.length} pets within ${maxDistance}km`
+            );
 
         } catch ( error: any) {
             // if anything goes wrong
