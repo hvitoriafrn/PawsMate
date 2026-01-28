@@ -36,7 +36,7 @@ export type PersonalityTrait =
 
 // Represent a user profile in the database
 export interface User {
-    id: string;
+    uid: string;
     email: string;
     name: string;
     age: number;
@@ -50,6 +50,8 @@ export interface User {
     profilePicture: string;
     bio: string;
     verified: boolean;
+    interests: string[];
+    petIds: string[];
 }
 
 // Represent the pet profile
