@@ -23,7 +23,6 @@ export default function SignUpScreen() {
   const [age, setAge] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [location, setLocation] = useState('');
   const [bio, setBio] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -37,11 +36,6 @@ export default function SignUpScreen() {
 
     if (!age || isNaN(parseInt(age)) || parseInt(age) < 18) { 
         Alert.alert('Error','You must be at least 18 years old');
-        return;
-    }
-
-    if (!location.trim()) {
-        Alert.alert('Error','Please enter your location');
         return;
     }
 
@@ -77,7 +71,7 @@ export default function SignUpScreen() {
         email,
         name,
         parseInt(age),
-        location, 
+        'Location pending...', 
         bio || undefined
       );
 
@@ -93,7 +87,7 @@ export default function SignUpScreen() {
       // if all correct, create user, show a message to user to let them know
       Alert.alert('Success', 'Account created successfully!');
       // Navigate to main app
-      router.replace('/(tabs)'); // because of 'replace' the user can't go to signup screen
+      router.replace('/onboarding/location'); // because of 'replace' the user can't go to signup screen
       
       // If any errors occuer, show the error to the user
     } catch (error: any) {
@@ -134,6 +128,7 @@ export default function SignUpScreen() {
             <TextInput
               style={styles.input}
               placeholder="Full Name"
+              placeholderTextColor={'#999'}
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
@@ -143,6 +138,7 @@ export default function SignUpScreen() {
             <TextInput
               style={styles.input}
               placeholder="Email"
+              placeholderTextColor={'#999'}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -152,7 +148,8 @@ export default function SignUpScreen() {
               {/* Password input */}
             <TextInput
               style={styles.input}
-              placeholder="Password (min 6 characters)"
+              placeholder="Password (min 8 characters)"
+              placeholderTextColor={'#999'}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -163,6 +160,7 @@ export default function SignUpScreen() {
             <TextInput
               style={styles.input}
               placeholder="Confirm Password"
+              placeholderTextColor={'#999'}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
@@ -173,24 +171,17 @@ export default function SignUpScreen() {
             <TextInput
               style={styles.input}
               placeholder="Age"
+              placeholderTextColor={'#999'}
               value={age}
               onChangeText={setAge}
               keyboardType="numeric"
-            />
-
-              {/* Location input */}
-            <TextInput
-              style={styles.input}
-              placeholder="Planet Earth"
-              value={location}
-              onChangeText={setLocation}
-              autoCapitalize="words"
             />
 
               {/* Bio input */}
             <TextInput
               style={styles.input}
               placeholder="It's me, hi, I'm the entirely uninteresting bio."
+              placeholderTextColor={'#999'}
               value={bio}
               onChangeText={setBio}
               multiline
