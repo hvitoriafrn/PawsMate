@@ -34,7 +34,9 @@ export default function ExploreScreen() {
 
 
     // Get all the active pets from Firestore
-    const { pets, loading, error, refetch } = useActivePets();
+    const { pets, loading, error, refetch } = useActivePets({
+        maxDistance: 10, // in kilometers
+    });
 
     // Get the current logged in users from Zustand 
     const { user } = useUserStore();
