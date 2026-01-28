@@ -6,13 +6,17 @@ import { db } from '@/config/firebase';
 import { Like, Pet, User } from '@/types/database';
 import {
     addDoc,
-    collection, doc, getDoc, getDocs,
+    collection, doc,
+    GeoPoint,
+    getDoc, getDocs,
     limit,
     orderBy,
     query,
+    serverTimestamp,
     setDoc,
     Timestamp,
-    where
+    updateDoc,
+    where,
 } from 'firebase/firestore';
 
 
@@ -41,7 +45,7 @@ export const createUserDocument = async (
 
         // Build the user data object
         const userData: User = {
-            id: userId,
+            uid: userId,
             email,
             name, 
             age, 
@@ -55,7 +59,9 @@ export const createUserDocument = async (
             bio: bio || 'Pet lover! :) ', // default bio so it isn't empy if user doesn't provide a bio
             verified: false,
             isActive: true,
-            createdAt: new Date()
+            createdAt: new Date(),
+            interests: [],
+            petIds:[]
         };
         
         // Save to firestore!
@@ -300,7 +306,34 @@ export const TimestampToDate = (timestamp: any): Date => {
     }
 
     return new Date();
-}; 
+
+}
+
+// Create or update user with location data:
+    export const updateUserLocation = async (
+    userId: string,
+    latitude: number,
+    longitude: number,
+    locationString?: string
+): Promise<void> => {
+    try {
+        const userRef = doc(db, 'users', userId);
+
+        await updateDoc(userRef, {
+            // Store as Firestore geopoint
+            geopoint: new GeoPoint(latitude,longitude),
+            // Store readable location (for display)
+            location: locationString || '${latitude.toFixed(4)}, ${longitude.toFixed(4)}',
+            updatedAt: serverTimestamp(),
+        });
+
+        console.log('User location updated');
+    } catch (error) {
+        console.error('Error updating location: ', error);
+        throw error;
+    }
+};
+
 
 // An example so I don't forget: 
 
@@ -310,6 +343,8 @@ export const TimestampToDate = (timestamp: any): Date => {
 
 // converting from firestore data
 // const verifiedDate = timestampToDate(data.verifiedAt);
+
+
 
 
 
