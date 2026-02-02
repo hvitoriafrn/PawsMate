@@ -149,7 +149,7 @@ export const useUser = (userId: string | null) => {
         }
     };
 
-    return { user, loading, error, refetched: fetchUser };
+    return { user, loading, error, refetch: fetchUser };
 };
 
 // Get all the pets belonging to one user

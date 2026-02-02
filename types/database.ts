@@ -62,9 +62,10 @@ export interface Pet {
     age: number;
     type: PetType;
     breed: string;
+    bio: string;
     gender: PetGender;
     size: PetSize
-    temperament: string;
+    temperament?: string;
     photo: string;
     photos?: string[];
     personalityTraits: PersonalityTrait[];
@@ -78,12 +79,16 @@ export interface Pet {
     verification: {
         microchipNumber?: string;
         verified: boolean;
-        verifiedAt?: Date;
+        verifiedAt?: Date | null;
         verifiedBy?: string; // admin user id
     }
-    active: boolean;
+    isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
+    ownerGeopoint?: {
+        latitude: number;
+        longitude: number;
+    };
 }
 
 
