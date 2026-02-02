@@ -44,8 +44,8 @@ export default function LocationOnboardingScreen() {
                 userLocation.latitude,
                 userLocation.longitude,
                 userLocation.city && userLocation.region 
-                ? '${userLocation.city}, ${userLocation.region}'
-                : '${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}'
+                ? `${userLocation.city}, ${userLocation.region}`
+                : `${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`
             );
 
             setLocationEnable(true);
