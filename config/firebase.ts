@@ -1,10 +1,13 @@
 // Import Firebase functions
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth'; //access firebase's authentication service system
-import { getFirestore } from 'firebase/firestore'; // access firebase's firestore db service
+import {
+  getReactNativePersistence,
+  initializeAuth,
+} from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
-// Your web app's Firebase configuration. All created and provided by Firebase, these were copied and pasted here.
-// These are unique to the firebases project created for PawsMate.
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "***REMOVED***",
   authDomain: "pawsmate-fad42.firebaseapp.com",
@@ -14,11 +17,15 @@ const firebaseConfig = {
   appId: "1:230565182355:web:af2a87391dd517bdfc4666"
 };
 
-// Initialise Firebase - this creates the connection.
+// Initialise Firebase app
 const app = initializeApp(firebaseConfig);
 
-// Initialise and export Firebase Authentication and export it, gives access to login,signup and logout functions
-export const auth = getAuth(app);
+// Initialise Auth with persistence 
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+});
+
+// Firestore stays the same
 export const db = getFirestore(app);
 
 export default app;

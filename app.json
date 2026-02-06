@@ -2,7 +2,7 @@
   "expo": {
     "name": "PawsMate",
     "slug": "PawsMate",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "pawsmate",
@@ -38,7 +38,7 @@
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     },
     "extra": {
       "router": {},
