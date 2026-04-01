@@ -1,74 +1,247 @@
-// placeholder for profile screen
+// Profile screen, where users can view and edit their information and manage their pets
 
+import PetFormModal, { PetData } from '@/components/petFormModal';
+import { auth } from '@/config/firebase';
 import { useUser, useUserPets } from '@/hooks/firestore';
+import {
+    deletePet,
+    updateUserProfile,
+} from '@/services/firebase/firestoreService';
 import { useUserStore } from '@/store/userStore';
-import { useRouter } from 'expo-router';
+import { pickImage, uploadImageToStorage } from '@/utils/imageUpload';
+import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { signOut } from 'firebase/auth';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Image,
-    Modal,
     Platform,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Switch,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
-
-import {
-    createPet,
-    deletePet,
-    updatePet,
-    updateUserProfile
-} from '@/services/firebase/firestoreService';
-
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
+
     // get the logged in user 
     const { user: authUser } = useUserStore();
-    const router = useRouter();
-
     // Get the user data from firestore using the user id
     const { user, loading: userLoading, refetch: refetchUser} = useUser(authUser?.uid || null);
-    
     // Get all pets owned by this user
     const { pets, loading: petsLoading, refetch: refetchPets } = useUserPets(authUser?.uid || null);
    
     // State to control the 'edit profile' modal
-    const [editProfileVisible, setEditProfileVisible] = useState(false);
-   
-    // State for controlling the Add pet modal
-    const [addPetVisible, setAddPetVisible] = useState(false);
-   
+    const [isEditing, setIsEditing] = useState(false);
     // State to store form data when editing
     const [editedName, setEditedName] = useState('');
     const [editedBio, setEditedBio] = useState('');
-
-    // State to store new pet data
-    const [newPetName, setNewPetName] = useState('');
-    const [newPetBreed, setNewPetBreed] = useState('');
-    const [newPetAge, setNewPetAge] = useState('1');
-
-    // State to control the edit pet modal
-    const [editPetVisible, setEditPetVisible] = useState(false);
-    const [editingPetId, setEditingPetId] = useState<string | null>(null);
-    const [editPetName, setEditPetName] = useState('');
-    const [editPetBreed, setEditPetBreed] = useState('');
-    const [editPetAge, setEditPetAge] = useState('1');
-
     // Check for profile and pet are being saved
     const [savingProfile, setSavingProfile] = useState(false);
-    const [savingPet, setSavingPet] = useState(false);
+  
+    // Controls the avatar upload spinner
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-    // Show loading while the user data is fetched from Firestore
+    // Banner upload!
+    const [bannerUri, setBannerUri] = useState<string | null>(null);
+    const [uploadingBanner, setUploadingBanner] = useState(false);
+
+    // Track whether the user has location sharing enabled
+    const [locationEnabled, setLocationEnabled] = useState(true);
+
+    // Pull to refresh
+    const [refreshing, setRefreshing] = useState(false);
+
+    // Controls the petFormModal, which handles add and edit pet modal
+    const [petModalVisible, setPetModalVisible] = useState(false);
+    const [editingPet, setEditingPet] = useState<PetData | undefined>(undefined);
+
+    // Handler for the pull to refresh
+    const onRefresh = async () => {
+        setRefreshing(true);
+        // Run both at the same time rather than one and then the other
+        await Promise.all([refetchUser(), refetchPets()]);
+        setRefreshing(false);
+    };
+
+    // Handle the avatar upload
+    const handleChangeAvatar = async () => {
+        if (!authUser?.uid) return;
+        setUploadingAvatar(true);
+        try {
+            const localUri = await pickImage();
+            if (!localUri) return;
+
+            // This will overwrite the old avatar
+            const path = `users/${authUser.uid}/avatar.jpg`;
+            const url = await uploadImageToStorage(localUri, path);
+
+            // Save the URL to firestore
+            await updateUserProfile(authUser.uid, { profilePicture: url });
+
+            // Refresh so it shows immediately
+            await refetchUser();
+        } catch (error) {
+            Alert.alert('Error', 'Could not update photo. Please try again.');
+        } finally {
+            setUploadingAvatar(false);
+        }
+    };
+
+    // Banner upload handler, similar to avatar but with different storage path and state
+    const handleChangeBanner = async() => {
+        if (!authUser?.uid) return;
+        setUploadingBanner(true);
+        try {
+            const localUri = await pickImage();
+            if (!localUri) return; // cancelled by user
+
+            const path = `users/${authUser.uid}/banner.jpg`;
+            const url = await uploadImageToStorage(localUri, path);
+
+            // Save the banner URL to firestore
+             await updateUserProfile(authUser.uid, { bannerPicture: url });
+
+             // Update the local state 
+             setBannerUri(url)
+        } catch (error) {
+            Alert.alert('Error', 'Could not update banner. Please try again');
+        } finally {
+            setUploadingBanner(false);
+        }
+    };
+
+
+    // Save profile edits
+    const handleSaveProfile = async () => {
+        if (!authUser?.uid) return;
+        if (!editedName.trim()) {
+            Alert.alert('Name required', 'Please enter your name.');
+        }
+        setSavingProfile(true);
+        try {
+            await updateUserProfile(authUser.uid, {
+                name: editedName.trim(),
+                bio: editedBio.trim(),
+            });
+            await refetchUser();
+            setIsEditing(false);
+        } catch (error) {
+            Alert.alert('Error', 'Could not save profile. Please try again.');
+        } finally {
+            setSavingProfile(false);
+        }
+    };
+
+    // Cancel edit, discard changes 
+    const handleCancelEdit = () =>  {
+        // Restore the inputs to the last saved values
+        if (user) {
+            setEditedName(user.name);
+            setEditedBio(user.bio);
+        }
+        setIsEditing(false);
+    };
+
+    // Pet handlers 
+
+    // Open petFormModal in Add new pet mode
+    const handleAddPet = () => {
+        setEditingPet(undefined);
+        setPetModalVisible(true);
+    };
+
+    // open the modal in Edit Pet, prefilled with the existingpoi.k, pet's data
+    const handleEditPet = (pet: any) => {
+            setEditingPet({
+            id: pet.id,
+            name: pet.name,
+            type: pet.type || 'Dog',
+            breed: pet.breed,
+            age: pet.age,
+            gender: pet.gender || 'Male',
+            size: pet.size || 'Medium',
+            tags: pet.personalityTraits || [],  
+            lookingFor: pet.lookingFor || [],
+            vaccinated: pet.healthInfo?.vaccinated || false,
+            spayedNeutered: pet.healthInfo?.spayedNeutered || false,
+            healthNotes: pet.healthInfo?.healthNotes || '',
+            microchipNumber: pet.verification?.microchipNumber || '',
+            photo: pet.photos || pet.photos?.[0] || '',
+            photos: pet.photos || (pet.photo ? [pet.photo] : []),
+    });
+    setPetModalVisible(true);
+    };
+
+    // Called by the petFormModal when a pet is saved
+    const handlePetSaved = async () => {
+        await refetchPets();
+        setPetModalVisible(false);
+    };
+
+   // Delete a pet after a confirmation
+   const handleDeletePet = async (pet: any) => {
+        const confirmDelete = Platform.OS === 'web'
+            ? confirm(`Are you sure you want to delete ${pet.name}?`)
+            : await new Promise((resolve) => {
+                Alert.alert(
+                    'Delete Pet',
+                    `Are you sure you want to delete ${pet.name}?`,
+                    [
+                        { text: 'Cancel', style: 'cancel', onPress:() => resolve(false) },
+                        { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+                    ]
+                );
+            });
+            
+        if (!confirmDelete) return;
+
+        try {
+            // deletePet will mark the pet as inactive and remove it from the user's petIds array
+            await deletePet(pet.id);
+            await refetchPets();
+            Alert.alert('Success',`${pet.name} has been deleted`);
+        } catch (error) {
+            Alert.alert('Error', 'Failed to delete pet');
+        }
+   };
+
+   // Log out!
+   const handleSignOut = async () => {
+        Alert.alert(
+            'Sign Out', 
+            'Are you sure you want to sign out?',
+            [
+                { text: 'Cancel', style: 'cancel'},
+                { 
+                    text: 'Sign Out',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await signOut(auth);
+                            router.replace('/auth/login');
+                        } catch (error) {
+                            Alert.alert('Error', 'Could not sign out. Please try again.')
+                        }
+                     },
+                }
+            ]
+        );
+   };
+
+    // Loading state
     if (userLoading) {
         return (
             <View style={styles.loadingContainer}>
-                <Text>Loading profile...</Text>
+                <ActivityIndicator size="large" color="#20B2AA"/>
+                <Text style={styles.loadingText}>Loading profile...</Text>
             </View>
         );
     }
@@ -76,7 +249,7 @@ export default function ProfileScreen() {
     if (!user) {
         return (
             <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>No user data found</Text>
+                <Text style={styles.errorText}> No user data found </Text>
                 <TouchableOpacity
                     style={styles.button}
                     onPress={() => router.push('/auth/login')}
@@ -87,847 +260,731 @@ export default function ProfileScreen() {
         );
     }
 
-    // User profile card section
+
+    // Render user profile card section
     return (
-        <View style={styles.container}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f0f0' }}>  
+            <ScrollView 
+                style={styles.screen}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> 
+                }
+            >
+            
+                {/* Banner and avatar */}
+                <View style={styles.bannerContainer}>
 
-                {/* User profile card */}
-                <View style={styles.profileCard}>
-                    <Image 
-                        source={{ uri: user.profilePicture }}
-                        style={styles.profileImage}
-                    />
-
-                    {/* User name and age */}
-                    <Text style={styles.userName}>
-                        {user.name}, {user.age}
-                    </Text>
-
-                    {/* Location */}
-                    <Text style={styles.userLocation}>
-                        📍 {user.location}
-                    </Text>
-
-                    {/* Bio */}
-                    <Text style={styles.userBio}>{user.bio}</Text>
-
-                    {/* Edit Profile button */}
+                    {/* Tapping the avatar will open the photo picker */}
                     <TouchableOpacity
-                        style={styles.editButton}
-                        onPress={() => {
-                            setEditedName(user.name);
-                            setEditedBio(user.bio);
-                            //show the edit modal
-                            setEditProfileVisible(true);
-                        }}
+                        onPress={handleChangeBanner}
+                        disabled={!isEditing}
+                        activeOpacity={isEditing ? 0.85 : 1}
+                        style={{ width: '100%' }}
                     >
-                        <Text style={styles.editButtonText}>✏️ Edit Profile</Text>
+                        {uploadingBanner ? (
+                            // a spinner overlay while it loads
+                            <View style={[styles.banner, styles.bannerLoading]}>
+                                <ActivityIndicator color="#fff" size="large"/>
+                                <Text style={styles.bannerLoadingText}>Updating banner...</Text>
+                            </View>
+                        ) : bannerUri || user.bannerPicture ? ( 
+                            //Show the uploaded banner
+                            <Image 
+                                source={{ uri: bannerUri || user.bannerPicture }}
+                                style={styles.bannerImage}
+                                resizeMode="cover"
+                            />
+                        ) : (
+                            //Default banner 
+                            <View style={styles.banner}>
+                                { isEditing && (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Feather name="camera" size={14} color="#f0f0f0" />
+                                    <Text style={styles.bannerHint}>Tap to edit banner</Text>
+                                </View>
+                                )}
+                            </View>
+                        )}
+                    </TouchableOpacity>
+
+                    {/*Avatar, overlapping with banner */}
+                    <TouchableOpacity
+                        style={styles.avatarWrapper}
+                        onPress={handleChangeAvatar}
+                        activeOpacity={isEditing ? 0.85 : 1}
+                        disabled={!isEditing}
+                    >
+                        {uploadingAvatar ? (
+                            // A spinner shown while uploading
+                            <View style={[styles.avatar, styles.avatarLoading]}>
+                                <ActivityIndicator color="#20B2AA"/>
+                            </View>
+                        ) : user.profilePicture ? (
+                            <Image
+                                source= {{ uri: user.profilePicture}}
+                                style={styles.avatar}
+                            />
+                        ) : (
+                            // show the first letter of the user's name as fall back
+                            <View style={[styles.avatar, styles.avatarFallback]}>
+                                <Text style={styles.avatarInitial}>
+                                    {user.name.charAt(0).toUpperCase() || '?'}
+                                </Text>
+                            </View>
+                            )}
+
+                            {/* A camera emoji to show the user they can tap the avatar */}
+                            { isEditing && (
+                            <View style={styles.cameraBadge}>
+                                <Feather name="camera" size={12} color="#555" />
+                            </View>
+                            )}
                     </TouchableOpacity>
                 </View>
 
-                {/* Location section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Location settings</Text>
+                {/* User profile card */}
+                <View style={[styles.card, { 
+                    marginTop: -1, 
+                    borderTopLeftRadius: 0,
+                    borderTopRightRadius: 0,
+                    paddingTop: 50,
+                    }]}>
+                    {isEditing ? (
+                        <>
+                            {/* Name and age */}
+                            <View style={styles.fieldRow}>
+                                <View style={{ flex:2 }}>
+                                    <Text style={styles.fieldLabel}> Name </Text>
+                                    <TextInput 
+                                        style={styles.fieldInput}
+                                        value={editedName}
+                                        onChangeText={setEditedName}
+                                        placeholder="Your name"
+                                        placeholderTextColor="#aaa"
+                                    />
+                                </View>
+                                <View style= {{ flex: 1, marginLeft:10 }}>
+                                    <Text style={styles.fieldLabel}>Age</Text>
+                                    <TextInput
+                                        style={styles.fieldInput}
+                                        value={user.age ? String(user.age) : ''}
+                                        keyboardType="number-pad"
+                                        maxLength={3}
+                                        editable={true}
+                                        placeholderTextColor="#aaa"
+                                    />
+                                </View>
+                            </View>
+
+                            <Text style={styles.fieldLabel}> Location </Text>  
+                            <TextInput
+                                style={styles.fieldInput}
+                                value={user.location}
+                                editable={false}
+                                placeholderTextColor="#aaa"
+                            />
+
+                            <Text style={styles.fieldLabel}>Bio</Text>
+                            <TextInput
+                                style={[styles.fieldInput, styles.bioInput]}      
+                                value={editedBio}
+                                onChangeText={setEditedBio}
+                                multiline
+                                placeholder="Here goes your very interesting bio!"
+                                placeholderTextColor="#aaa"
+                                textAlignVertical="top"
+                            />
+
+                            {/* Save and cancel buttons */} 
+                            <View style={styles.editBtnRow}>
+                                <TouchableOpacity
+                                    style={styles.saveBtn}
+                                    onPress={handleSaveProfile}
+                                    disabled={savingProfile}
+                                >
+                                    {savingProfile
+                                        ? <ActivityIndicator color="#fff"/>
+                                        : (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap:6 }}>
+                                            <Feather name="save" size={16} color="#fff"/>
+                                            <Text style={styles.saveBtnText}>Save</Text>
+                                        </View> 
+                                        )
+                                    }
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.cancelBtn}
+                                    onPress={handleCancelEdit}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <Feather name="x" size={16} color="#555" />
+                                        <Text style={styles.cancelBtnText}>Cancel</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            </View>
+                        </> 
+                    ) : (                  
+                    <>
+                        {/* View  mode */}
+                        <View style={styles.profileNameRow}>
+                            <Text style={styles.profileName}>
+                                {user.name}{user.age ? `, ${user.age}` : ''}
+                            </Text>
+                            {/* Tapping the pencil icon opens the edit form */}
+                            <TouchableOpacity
+                                onPress={() => {
+                                    // Prefill the fields with existing values
+                                    setEditedName(user.name);
+                                    setEditedBio(user.bio);
+                                    setIsEditing(true);
+                                }}
+                            >
+                                <Feather name="edit-2" size={14} color="#00c489" />
+                            </TouchableOpacity>
+                        </View>
+                        
+                        {user.location ? (
+                            <Text style={styles.profileLocation}>
+                                 {user.location}
+                            </Text>
+                        ) : null}
+
+                            <Text style={styles.profileBio}>
+                                {user.bio || "Tap ✏️  to add a bio"}
+                            </Text>
+                        </>
+                    )}
+                </View>
+
+                {/* My pets */}
+                <View style={styles.card}>
+                    <View style={styles.petsHeader}>
+                        <Text style={styles.sectionTitle}>My Pets</Text>
+                        <TouchableOpacity
+                            style={styles.addPetBtn}
+                            onPress={handleAddPet}
+                        >
+                            <Text style={styles.addPetBtnText}>+ Add Pet</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {petsLoading ? (
+                        <ActivityIndicator
+                            color="#20B2AA"
+                            style={{ marginVertical: 20}}
+                        />
+                    ) : pets.length === 0 ? (
+                        <View style={styles.emptyPets}>
+                            <Text style={styles.emptyPetsIcon}>🐾</Text>
+                            <Text style={styles.emptyPetsText}>
+                                No pets yet. Tap "Add Pet" to get started!
+                            </Text>
+                        </View>
+                    ) : (
+                        pets.map((pet) => (
+                            <PetCard
+                                key={pet.id}
+                                pet={pet}
+                                onEdit={() => handleEditPet(pet)}
+                                onDelete={() => handleDeletePet(pet)}
+                            />
+                        ))
+                    )}
+                </View>
+
+                {/* Location settings */}
+                <View style={styles.card}>
+                    <Text style={styles.sectionTitle}>Location Settings</Text>
                     <View style={styles.locationRow}>
                         <Text style={styles.locationLabel}>Share my location</Text>
-                        {/* Switch component to toggle on or off*/}
-                        <Switch 
-                            value={true}
+                        <Switch
+                            value={locationEnabled}
                             onValueChange={(value) => {
+                                setLocationEnabled(value);
                                 Alert.alert(
                                     'Location',
                                     value ? 'Location enabled' : 'Location disabled'
                                 );
                             }}
-                            trackColor={{ false: '#d1d5db', true: '#10b981' }}
+                            trackColor={{ false: '#d1d5db', true: '#00c489' }}
                             thumbColor="#fff"
                         />
                     </View>
-
                     <Text style={styles.locationHelper}>
-                        When enabled, users nearby can see your pets and you will be able to find nearby users!
+                        When enabled, nearby users can see your pets and you can find pets near you.
                     </Text>
                 </View>
 
-                {/* Pets Section */}
-                <View style={styles.section}>
-                    {/* Section header */}
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>My Pets:</Text>
-
-                        <TouchableOpacity
-                            style={styles.addButton} 
-                            onPress={() => setAddPetVisible(true)}
-                        >
-                            <Text style={styles.addButtonText}>+ Add Pet</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Show loading while pets are being fetched */}
-                    {petsLoading ? (
-                        <Text style={styles.loadingText}>Loading pets...</Text>
-                    ) : pets.length === 0 ? (
-                        // Show empty state if user has no pets yet
-                        <View style={styles.emptyPets}>
-                            <Text style={styles.emptyPetsText}>🐾</Text>
-                            <Text style={styles.emptyPetsSubtext}>
-                                You have no pets yet. Add your first pet!
-                            </Text>
-                        </View>
-                    ) : (
-                        // Show list of pets if they have any
-                        pets.map((pet) => (
-                            <View key={pet.id} style={styles.petCard}>
-                                {/* Pet Photo */}
-                                <Image
-                                    source={{ uri: pet.photo }}
-                                    style={styles.petPhoto}
-                                />
-                                
-                                {/* Pet Info */}
-                                <View style={styles.petInfo}>
-                                    <Text style={styles.petName}>{pet.name}</Text>
-                                    <Text style={styles.petDetails}>
-                                        {pet.breed} • {pet.age} years
-                                    </Text>
-                                    <Text style={styles.petSize}>Size: {pet.size}</Text>
-                                </View>
-                                
-                                {/* Edit button for this pet */}
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        // Store the pet being edited
-                                        setEditingPetId(pet.id);
-
-                                        // The form is prefilled with the current data (so it doesn't show blank)
-                                        setEditPetName(pet.name);
-                                        setEditPetBreed(pet.breed);
-                                        setEditPetAge(pet.age.toString());
-                                        // Show the edit modal
-                                        setEditPetVisible(true);
-                                    }}
-                                >
-                                    <Text style={styles.editIcon}>✏️</Text>
-                                </TouchableOpacity>
-                
-                                {/* Delete pet button */}
-                                <TouchableOpacity 
-                                    onPress={async () =>{
-                                        console.log('Delete button pressed for pet : ', pet.name);
-                                        // Confirm deletion with an alert
-                                        const confirmDelete = Platform.OS === 'web'
-                                            ? confirm(`Are you sure you want to delete ${pet.name}?`)
-                                            : await new Promise((resolve) => {
-                                                Alert.alert(
-                                                    'Delete Pet',
-                                                    `Are you sure you want to delete ${pet.name}?`,
-                                            [
-                                                { 
-                                                    text: 'Cancel',
-                                                    style: 'cancel',
-                                                    onPress: () => resolve(false)
-                                                },
-                                                {
-                                                    text: 'Delete',
-                                                    style: 'destructive',
-                                                    onPress: () => resolve(true),
-                                                },
-                                            ]
-                                        );
-                                    });
-
-                                    if (!confirmDelete) {
-                                        console.log('Delete cancelled');
-                                        return;
-                                    }
-
-                                    console.log('Delete confirmed');
-                                    try {
-                                        await deletePet(pet.id);
-                                        await refetchPets();
-                                        Alert.alert('Success', `${pet.name} has been deleted`)
-                                    } catch (error) {
-                                        console.error('Error deleting the pet: ', error);
-                                        Alert.alert('Error', 'Failed to delete pet');
-                                    }
-                                    }}
-                                >
-                                    <Text style={styles.editIcon}> 🗑️ </Text>
-                                </TouchableOpacity>
-                            </View>
-                        ))
-                    )}
-                </View>
-            </ScrollView>
-
-            {/* Edit Profile Modal */}
-            <Modal
-                visible={editProfileVisible}
-                animationType="slide"
-                transparent={true}
-            >
-                <View style={styles.modalOverlay}>
-                    {/* Content Card */}
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Edit Profile</Text>
-
-                        {/* Name input */}
-                        <Text style={styles.inputLabel}>Name</Text>
-                        <TextInput 
-                            style={styles.input}
-                            value={editedName}
-                            onChangeText={setEditedName}
-                            placeholder="Your name" 
-                        />
-
-                        {/* Bio input */}
-                        <Text style={styles.inputLabel}>Bio</Text>
-                        <TextInput
-                            style={[styles.input, styles.textArea]}
-                            value={editedBio}
-                            onChangeText={setEditedBio}
-                            placeholder='Tell us about yourself...'
-                            multiline
-                            numberOfLines={3}
-                        />
-
-                        {/* Action buttons */}
-                        <View style={styles.modalButtons}>
-                            {/* Cancel Button */}
-                            <TouchableOpacity
-                                style={styles.cancelButton}
-                                onPress={() => setEditProfileVisible(false)}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-
-                            {/* Save Button */}
-                            <TouchableOpacity
-                                style={[
-                                    styles.saveButton,
-                                    savingProfile && styles.saveButtonDisabled,
-                                ]}
-                                    onPress={ async () => {
-                                        if (!editedName.trim()) {
-                                            Alert.alert('Error', 'Name cannot be empty');
-                                            return;
-                                        }
-
-                                        try {
-                                            // Show loading state
-                                            setSavingProfile(true);
-
-                                            //Save to firestore
-                                            await updateUserProfile(authUser!.uid, {
-                                                name: editedName.trim(), 
-                                                bio: editedBio.trim(),
-                                            });
-
-                                                //Refresh the data immediately
-                                                await refetchUser();
-                                                
-                                                // show success message
-                                                Alert.alert('Success', 'Profile updated!');
-
-                                                // close modal
-                                                setEditProfileVisible(false);
-                                            
-                                        } catch (error) {
-                                            console.error('Error updating profile:', error);
-                                            Alert.alert(
-                                                'Error',
-                                                'Failed to update profile. Try again'
-                                            );
-                                        } finally {
-                                            // stop loading 
-                                            setSavingProfile(false);
-                                        }
-                                    }} disabled = {savingProfile}
-                            >
-                            {savingProfile ? (
-                                <ActivityIndicator color="white" />
-                            ) : ( 
-                                <Text style={styles.saveButtonText}>Save</Text>
-                            )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* Add Pet Modal */}
-            <Modal
-                visible={addPetVisible}
-                animationType='slide'
-                transparent={true}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Add new pet</Text>
-
-                        {/* Pet name */}
-                        <Text style={styles.inputLabel}>Pet Name *</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={newPetName}
-                            onChangeText={setNewPetName}
-                            placeholder="e.g., Cookie"
-                        />
-
-                        {/* Breed */}
-                        <Text style={styles.inputLabel}>Breed</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={newPetBreed}
-                            onChangeText={setNewPetBreed}
-                            placeholder="e.g., Chihuahua"
-                        />
-
-                        {/* Age */}
-                        <Text style={styles.inputLabel}>Age *</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={newPetAge}
-                            onChangeText={setNewPetAge}
-                            placeholder="Age in years"
-                            keyboardType="numeric" // Shows number keyboard on mobile
-                        />
-
-                        {/* Buttons */}
-                        <View style={styles.modalButtons}>
-                            <TouchableOpacity
-                                style={styles.cancelButton}
-                                onPress={() => {
-                                    // Close modal and clear form
-                                    setAddPetVisible(false);
-                                    setNewPetName('');
-                                    setNewPetBreed('');
-                                    setNewPetAge('1');
-                                }}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-
-                        {/* Save button*/}
-                            <TouchableOpacity
-                                style={[
-                                    styles.saveButton,
-                                    savingPet && styles.saveButtonDisabled,
-                                ]}
-                                onPress={async () => {
-                                    // Validate all required fields
-                                    if (!newPetName.trim()) {
-                                    Alert.alert('Error', 'Please enter pet name');
-                                    return;
-                                    }
-                                    
-                                    if (!newPetBreed.trim()) {
-                                    Alert.alert('Error', 'Please enter breed');
-                                    return;
-                                    }
-                                    
-                                    // Validate age is a valid number
-                                    const ageNum = parseInt(newPetAge);
-                                    if (isNaN(ageNum) || ageNum < 0 || ageNum > 20) {
-                                    Alert.alert('Error', 'Please enter a valid age');
-                                    return;
-                                    }
-
-                                    try {
-                                    // Show loading state
-                                    setSavingPet(true);
-                                    
-                                    // Create pet object with user's ID as owner
-                                    const newPet = {
-                                        ownerId: authUser!.uid,      // Current user is the owner
-                                        name: newPetName.trim(),
-                                        breed: newPetBreed.trim(),
-                                        age: ageNum,                 // Convert string to number
-                                    };
-                                    
-                                    // Save pet to Firestore (create the pet)
-                                    const petId = await createPet(newPet);
-                                    
-                                    console.log('Pet created with ID: ${petId}');
-                                    
-                                    // Wait and sync with firestore
-                                    await new Promise(resolve => setTimeout(resolve,500));
-                                    
-                                    // refresh
-                                    await refetchPets();
-
-                                    // Show success messag
-                                    Alert.alert('Success', `${newPetName} has been added!`);
-                                    
-                                    // Clear the form
-                                    setNewPetName('');
-                                    setNewPetBreed('');
-                                    setNewPetAge('1');
-                                    
-                                    // Close the modal
-                                    setAddPetVisible(false);
-                                    
-                                    // Refresh the pets list
-                                    // This re-fetches pets from Firestore so the new pet appears
-                                    refetchPets();
-                                    
-                                    } catch (error) {
-                                    console.error('Error creating pet:', error);
-                                    Alert.alert(
-                                        'Error',
-                                        'Failed to create pet. Please try again.'
-                                    );
-                                    } finally {
-                                    // Always stop loading
-                                    setSavingPet(false);
-                                    }
-                                }}
-                                disabled={savingPet}
-                                >
-                                {savingPet ? (
-                                    <ActivityIndicator color="white" />
-                                ) : (
-                                    <Text style={styles.saveButtonText}>Add Pet</Text>
-                                )}
-                                </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* Edit Pet Modal */}
-            <Modal 
-                visible={editPetVisible}
-                animationType='slide'
-                transparent={true}
+                {/* Sign out */}
+                <TouchableOpacity
+                    style={styles.signOutBtn}
+                    onPress={handleSignOut}
                 >
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.modalContent}>
-                            <Text style={styles.modalTitle}> Edit Pet </Text>
+                    <Text style={styles.signOutText}>Sign Out</Text>
+                </TouchableOpacity>
 
-                        {/* Pet name */}
-                        <Text style={styles.inputLabel}> Pet Name </Text>
-                        <TextInput 
-                            style={styles.input}
-                            value={editPetName}
-                            onChangeText={setEditPetName}
-                            placeholder='e.g., Cookie'
-                        />
-
-                        {/* Breed */}
-                        <Text style={styles.inputLabel}> Breed </Text>
-                        <TextInput 
-                            style={styles.input}
-                            value={editPetBreed}
-                            onChangeText={setEditPetBreed}
-                            placeholder='e.g., Chihuahua'
-                        />
-
-                        {/* Age */}
-                        <Text style={styles.inputLabel}> Age </Text>
-                        <TextInput
-                            style={styles.input}
-                            value={editPetAge}
-                            onChangeText={setEditPetAge}
-                            placeholder='Age'
-                            keyboardType='numeric'
-                        />
-
-                        {/* Buttons */}
-                        <View style={styles.modalButtons}>
-                            {/* Cancel Button */}
-                            <TouchableOpacity
-                                style={styles.cancelButton}
-                                onPress={() => {
-                                    setEditPetVisible(false)
-                                    setEditingPetId(null);
-                                    setEditPetName('');
-                                    setEditPetBreed(''),
-                                    setEditPetAge('1')
-                                }}
-                        >
-                            <Text style={styles.cancelButtonText}> Cancel </Text>
-                        </TouchableOpacity>
-
-                        {/* Save changes button */}
-                        <TouchableOpacity
-                            style={[
-                                styles.saveButton,
-                                savingPet && styles.saveButtonDisabled,
-                            ]}
-                            onPress={async() =>{
-                                //Validate the inputs
-                                if (!editPetName.trim()) {
-                                    Alert.alert('Error', 'Please enter pet name')
-                                    return;
-                                }
-
-                                if (!editPetBreed.trim()) {
-                                    Alert.alert('Error', 'Please enter breed');
-                                    return;
-                                }
-
-                                const ageNum = parseInt(editPetAge);
-                                    if (isNaN(ageNum) || ageNum < 0 || ageNum > 20) {
-                                        Alert.alert('Error', 'Please enter a valid age');
-                                        return;
-                                }
-
-                                try {
-                                    setSavingPet(true);
-                                    await updatePet(editingPetId!, {
-                                        name: editPetName.trim(),
-                                        breed: editPetBreed.trim(),
-                                        age:ageNum,
-                                    });
-
-                                    // sync
-                                    await new Promise(resolve => setTimeout(resolve, 500));
-                                    
-                                    // refresh
-                                    await refetchPets();
-
-                                    setEditPetVisible(false);
-                                    setEditingPetId(null);
-
-                                } catch (error) {
-                                    console.error('Error updating pet:', error);
-                                    Alert.alert('Error', 'Failed to update pet');
-                                } finally {
-                                    setSavingPet(false);
-                                }
-                            }}
-                            disabled={savingPet}
-                        >
-                            {savingPet ? (
-                                <ActivityIndicator color="white"/>
-                            ) : ( 
-                                <Text style={styles.saveButtonText}> Save Changes </Text>
-                            )}
-                    </TouchableOpacity>
-                </View>
-            </View>
-        </View> 
-    </Modal>
-</View>
-);
+                {/* Bottom padding */}
+                <View style={{ height: 40 }} />
+            </ScrollView>
+            
+            <PetFormModal
+                visible={petModalVisible}
+                onClose={() => setPetModalVisible(false)}
+                onSaved={handlePetSaved}
+                initialData={editingPet}
+            />
+        </SafeAreaView>
+    );
 }
+        // Render one pet row in the 'My pets list'
+        interface PetCardProps{
+            pet: any;
+            onEdit:() => void;
+            onDelete: () => void;
+        }
 
+            function PetCard({ pet, onEdit, onDelete }: PetCardProps) {
+                return (
+                    <View style={cardStyles.container}>
+
+                        {/* Pet photo, first from the array to show */}
+                        {pet.photos?.[0] || pet.photo ? (
+                            <Image 
+                                source= {{ uri: pet.photos?.[0] || pet.photo }}
+                                style={cardStyles.thumb}
+                            />
+                        ) : (
+                            <View style={[cardStyles.thumb, cardStyles.thumbPlaceholder]}>
+                                <Text style={{ fontSize: 28 }}>🐶 </Text>
+                            </View>
+                        )}
+
+                        <View style= {{ flex: 1 }}>
+                            {/* Name row that includes edit and delete icons */}
+                            <View style={cardStyles.nameRow}>
+                                <Text style={cardStyles.name}>{pet.name}</Text>
+                                <View style= {{ flexDirection: 'row', gap:4 }}>
+                                    <TouchableOpacity 
+                                        onPress={onEdit}
+                                        style={{ padding: 4}}
+                                    >
+                                        <Feather name="edit-2" size={14} color="#00c489" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        onPress={onDelete}
+                                        style= {{ padding: 4 }}>
+                                           <Feather name="trash-2" size={14} color="#ef4444" />
+                                        </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            {/* Breed, age and gender */}
+                            <Text style={cardStyles.meta}>
+                                {pet.breed} · {pet.age} {pet.age !== 1 ? 'years' : 'year'} · {pet.gender}
+                            </Text>
+                            <Text style={cardStyles.meta}>Size: {pet.size}</Text>
+                            
+
+                            {/* Personality tags, the chips, shown max of 3 */}
+                            {(pet.personalityTraits?.length >0 || pet.tags?.length >0) && (
+                                <View style={cardStyles.chipRow}>
+                                    {(pet.personalityTraits || pet.tags || []).slice(0, 3).map((tag: string) => (
+                                        <View key={tag} style={cardStyles.tagChip}>
+                                            <Text style={cardStyles.tagText}> {tag} </Text>
+                                        </View>
+                                    ))}
+                                    {/* Show the count of how many extra tags like "+2 more" */}
+                                    {(pet.personalityTraits || pet.tags || []).length > 3 && (
+                                        <Text style={cardStyles.overflow}>
+                                            +{(pet.personalityTraits || pet.tags || []).length - 3}
+                                        </Text>
+                                    )}
+                                </View>
+                            )}
+
+                            {/* Looking for tags, max of 2 shown */}
+                            {pet.lookingFor?.length > 0 && (
+                                <View style={cardStyles.chipRow}>
+                                    {pet.lookingFor.slice(0,2).map((lf: string) => (
+                                        <View key= {lf} style={cardStyles.lfChip}>
+                                            <Text style={cardStyles.lfText}>{lf}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                );
+            }
+
+ // Styles
 const styles = StyleSheet.create({
-    // main container 
-    container: {
-        flex: 1, 
-        backgroundColor: '#f9fafb',
-        marginTop: 50,
+
+    screen: {
+        flex: 1,
+        backgroundColor: '#f0f0f0',
     },
 
-    // Loading container
+    // Loading & error states
     loadingContainer: {
         flex: 1,
-        justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f9fafb',
+        justifyContent: 'center',
+        backgroundColor: '#fafaf0',
     },
-
-    // Error container
+    loadingText: {
+        marginTop: 12,
+        fontSize: 16,
+        color: '#6b7280',
+    },
     errorContainer: {
         flex: 1,
-        justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f9fafb',
+        justifyContent: 'center',
+        backgroundColor: '#f0f0f0',
         padding: 20,
     },
-
     errorText: {
         fontSize: 18,
         color: '#ef4444',
         marginBottom: 20,
     },
-
     button: {
-        backgroundColor: '#10b981',
+        backgroundColor: '#F2B949',
         paddingVertical: 12,
         paddingHorizontal: 24,
         borderRadius: 12,
     },
-
     buttonText: {
         color: 'white',
         fontSize: 16,
         fontWeight: '600',
     },
 
-    // profile card
-    profileCard: {
-        backgroundColor: 'white',
-        margin: 16,
-        padding: 20,
-        borderRadius: 16,
+    // Banner and avatar
+    bannerContainer: {
+        position: 'relative',
+        marginBottom: 0, 
+        marginHorizontal:12,
+        borderRadius:16,
+    },
+    banner: {
+        height: 100,
+        backgroundColor: '#F2B949',
         alignItems: 'center',
+        justifyContent: 'center',
+        borderTopLeftRadius: 16,  
+        borderTopRightRadius: 16,
+        borderBottomLeftRadius: 0, 
+        borderBottomRightRadius: 0,
+    },
+    bannerImage: {
+        width:'100%',
+        height: 140,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+    },
+    bannerLoading: {
+        backgroundColor: '#F2B949',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    bannerLoadingText: {
+        color: '#fff',
+        fontSize: 14,
+    },
+    bannerHint: {
+        // hint text on the default banner
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 13,
+    },
+    
+    // Avatar style
+    avatarWrapper: {
+        position: 'absolute',
+        bottom: -45,  // pushes the avatar to overlap the banner bottom
+        left: 16,
+        zIndex:10,
+    },
+    avatar: {
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        borderWidth: 3,
+        borderColor: '#fff',
+    },
+    avatarLoading: {
+        backgroundColor: '#e0f5f5',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    avatarFallback: {
+        backgroundColor: '#e0f5f5',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    avatarInitial: {
+        fontSize: 36,
+        fontWeight: '700',
+        color: '#20B2AA',
+    },
+    cameraBadge: {
+        position: 'absolute',
+        bottom: 2,
+        right: 2,
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: '#fff',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#ddd',
+    },
+
+    // White card (profile information, pet and location)
+    card: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        marginHorizontal: 12,
+        marginBottom: 12,
+        padding: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
+        elevation: 2,
     },
 
-    // Profile picture
-    profileImage: {
-        width: 100, 
-        height: 100, 
-        borderRadius: 50,
-        marginBottom: 16,
-        borderWidth: 3, 
-        borderColor: '#10b981',
+    // Profile view mode
+    profileNameRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    profileName: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111',
+    },
+    profileLocation: {
+        fontSize: 14,
+        color: '#666',
+        marginTop: 2,
+        marginBottom: 2,
+    },
+    profileBio: {
+        fontSize: 14,
+        color: '#444',
+        lineHeight: 20,
+        marginTop: 4,
     },
 
-    userName: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#111827',
+    // Profile edit move
+     fieldRow: {
+        flexDirection: 'row',
+    },
+    fieldLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#555',
+        marginTop: 10,
+        marginBottom: 4,
+    },
+    fieldInput: {
+        borderWidth: 1,
+        borderColor: '#ddd',
+        borderRadius: 8,
+        padding: 10,
+        fontSize: 15,
+        color: '#333',
+        backgroundColor: '#fafafa',
+    },
+    bioInput: {
+        height: 80,
+        paddingTop: 8,
+    },
+    editBtnRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginTop: 16,
+    },
+    saveBtn: {
+        flex: 1,
+        backgroundColor: '#F2B949',
+        paddingVertical: 12,
+        borderRadius: 10,
+        alignItems: 'center',
+    },
+    saveBtnText: {
+        color: '#000000',
+        fontWeight: '700',
+        fontSize: 15,
+    },
+    cancelBtn: {
+        flex: 1,
+        backgroundColor: '#f5f5f5',
+        paddingVertical: 12,
+        borderRadius: 10,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+    },
+    cancelBtnText: {
+        color: '#555',
+        fontWeight: '600',
+        fontSize: 15,
+    },
+
+    // 'My pets' section
+    petsHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#111',
+    },
+    addPetBtn: {
+        backgroundColor: '#F2B949',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+    },
+    addPetBtnText: {
+        color: '#000000',
+        fontWeight: '700',
+        fontSize: 14,
+    },
+    emptyPets: {
+        alignItems: 'center',
+        paddingVertical: 24,
+    },
+    emptyPetsIcon: {
+        fontSize: 40,
         marginBottom: 8,
     },
-
-    userLocation: {
-        fontSize: 16,
-        color: '#6b7280',
-        marginBottom: 12,
-    },
-
-    userBio: {
+    emptyPetsText: {
         fontSize: 14,
-        color: '#4b5563',
+        color: '#aaa',
         textAlign: 'center',
-        marginBottom: 16,
     },
 
-    editButton: {
-        backgroundColor: '#10b981',
-        paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 12,
-    },
-
-    editButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-
-    // Section styles
-    section: {
-        backgroundColor: 'white',
-        margin: 16,
-        marginTop: 0,
-        padding: 16,
-        borderRadius: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
-    },
-
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#111827',
-        marginBottom: 12,
-    },
-
+    //Location section
     locationRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        marginTop: 8,
         marginBottom: 8,
     },
-
     locationLabel: {
         fontSize: 16,
         color: '#374151',
     },
-
     locationHelper: {
-        fontSize: 14,
+        fontSize: 13,
         color: '#6b7280',
-        marginTop: 8,
+        lineHeight: 18,
     },
 
-    sectionHeader: {
+    //Sign out button
+    signOutBtn: {
+        marginHorizontal: 12,
+        paddingVertical: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#ddd',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        marginBottom: 12,
+    },
+    signOutText: {
+        color: '#e05555',
+        fontWeight: '600',
+        fontSize: 15,
+    },
+});
+
+// Styles for the pet card, separate since it's a different component
+const cardStyles = StyleSheet.create({
+    container: {
+        flexDirection: 'row',
+        gap: 12,
+        padding: 12,
+        marginBottom: 8,
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+    },
+    thumb: {
+        width: 62,
+        height: 62,
+        borderRadius: 30,
+        alignSelf: 'center',
+    },
+    thumbPlaceholder: {
+        backgroundColor: '#f0f0f0',
+        alignItems: 'center',
+        justifyContent: 'center',
+        alignSelf: 'center',
+    },
+    nameRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16,
-    },
-
-    addButton: {
-        backgroundColor: '#10b981',
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-    },
-
-    addButtonText: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-
-    loadingText: {
-        textAlign: 'center',
-        color: '#6b7280',
-        fontSize: 14,
-        paddingVertical: 20,
-    },
-
-    emptyPets: {
-        alignItems: 'center',
-        paddingVertical: 40,
-    },
-
-    emptyPetsText: {
-        fontSize: 48,
-        marginBottom: 12,
-    },
-
-    emptyPetsSubtext: {
-        fontSize: 16,
-        color: '#6b7280',
-        textAlign: 'center',
-    },
-
-    // Pet card 
-    petCard: {
-        flexDirection: 'row',
-        backgroundColor: '#f9fafb',
-        padding: 12,
-        borderRadius: 12,
-        marginBottom: 12,
-        alignItems: 'center',
-    },
-
-    petPhoto: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        marginRight: 12,
-    },
-
-    petInfo: {
-        flex: 1,
-    },
-
-    petName: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#111827',
-        marginBottom: 4,
-    },
-
-    petDetails: {
-        fontSize: 14,
-        color: '#6b7280',
         marginBottom: 2,
     },
-
-    petSize: {
+    name: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#111',
+    },
+    meta: {
         fontSize: 13,
-        color: '#9ca3af',
+        color: '#666',
+        marginBottom: 1,
     },
-
-    editIcon: {
-        fontSize: 20,
-        padding: 8,
-    },
-
-    // Modal overlay
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-
-    // Modal content
-    modalContent: {
-        backgroundColor: 'white',
-        width: '100%',
-        maxWidth: 400,
-        borderRadius: 20,
-        padding: 24,
-    },
-
-    modalTitle: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#111827',
-        marginBottom: 20,
-        textAlign: 'center',
-    },
-
-    inputLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 8,
-    },
-
-    // text input
-    input: {
-        backgroundColor: '#f3f4f6',
-        padding: 12,
-        borderRadius: 12,
-        fontSize: 16,
-        borderWidth: 1,
-        borderColor: '#e5e7eb', 
-        marginBottom: 16,
-    },
-
-    // Multiline text area
-    textArea: {
-        height: 80,
-        textAlignVertical: 'top',
-    },
-
-    modalButtons: {
+    chipRow: {
         flexDirection: 'row',
-        gap: 12,
-        marginTop: 8,
+        flexWrap: 'wrap',
+        gap: 4,
+        marginTop: 5,
     },
-
-    cancelButton: {
-        flex: 1,
-        backgroundColor: '#f3f4f6',
-        padding: 14,
-        borderRadius: 12,
-        alignItems: 'center',
+    tagChip: {
+        backgroundColor: '#e0f5f5',
+        paddingVertical: 3,
+        paddingHorizontal: 8,
+        borderRadius: 10,
     },
-
-    cancelButtonText: {
-        color: '#6b7280',
-        fontSize: 16,
+    tagText: {
+        fontSize: 11,
+        color: '#20B2AA',
         fontWeight: '600',
     },
-
-    // Button styles
-    saveButton: {
-        flex: 1,
-        backgroundColor: '#10b981', 
-        padding: 14, 
-        borderRadius: 12, 
-        alignItems: 'center',
+    lfChip: {
+        backgroundColor: '#fff3e0',
+        paddingVertical: 3,
+        paddingHorizontal: 8,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#F5A623',
     },
-
-    saveButtonText: {
-        color: 'white',
-        fontSize: 16,
+    lfText: {
+        fontSize: 11,
+        color: '#F5A623',
         fontWeight: '600',
     },
-
-    saveButtonDisabled: {
-        backgroundColor: '#6ee7b7', 
-        opacity: 0.7,             
-    }
+    overflow: {
+        fontSize: 11,
+        color: '#aaa',
+        alignSelf: 'center',
+    },
 });
