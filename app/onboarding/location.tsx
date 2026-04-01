@@ -1,6 +1,7 @@
 import { useLocation } from '@/hooks/useLocation';
 import { updateUserLocation } from '@/services/firebase/firestoreService';
 import { useUserStore } from '@/store/userStore';
+import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -92,11 +93,11 @@ export default function LocationOnboardingScreen() {
         <View style={styles.container}>
             {/* Header Section */}
             <View style={styles.header}>
-                <Text style={styles.emoji}>📍</Text>
+                <Feather name="map-pin"  size={24} color='#00000'/>,
                 <Text style={styles.title}> Enable Location </Text>
                 <Text style={styles.subtitle}>
                     PawsMate uses your location to show nearby Pets & Events
-                </Text>
+                </Text>ßß
         </View>
     
         {/* Privacy Note */}
@@ -187,7 +188,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   privacyNote: {
-    backgroundColor: '#f0f9ff',
+    backgroundColor: '#f0f0f0',
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
@@ -224,7 +225,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   enableButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#F2B949',
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
@@ -234,7 +235,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#6ee7b7',
   },
   enableButtonText: {
-    color: 'white',
+    color: '#000000',
     fontSize: 16,
     fontWeight: '600',
   },
