@@ -230,7 +230,8 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 10,
-    color: '#333',
+    color: '#111',
+    alignSelf: 'center',
   },
 
   // Subtitle
@@ -238,6 +239,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginBottom: 40,
+    alignSelf: 'center',
   },
 
   // Form container
@@ -257,14 +259,14 @@ const styles = StyleSheet.create({
 
   // Primary button
   primaryButton: {
-    backgroundColor: '#4A90E2',
+    backgroundColor: '#F2B949',
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 10,
   },
   primaryButtonText: {
-    color: '#fff',
+    color: '#111',
     fontSize: 18,
     fontWeight: '600',
   },
@@ -282,7 +284,7 @@ const styles = StyleSheet.create({
 
   // text link in the footer
   linkText: {
-    color: '#4A90E2',
+    color: '#F2B949',
     fontSize: 16,
     fontWeight: '600',
   },
