@@ -5,9 +5,12 @@ import { useRouter } from 'expo-router'; // router for navigation
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react'; // React state management
 import {
-  Alert, KeyboardAvoidingView, Platform, StyleSheet,
+  Alert,
+  Image,
+  KeyboardAvoidingView, Platform, StyleSheet,
   Text, TextInput, TouchableOpacity, View
 } from 'react-native';
+
 
 // Login Screen Component
 export default function LoginScreen() {
@@ -60,8 +63,14 @@ export default function LoginScreen() {
     >
       
       <View style={styles.content}>
+         <Image
+                  source={require('@/assets/images/pawsmateLanding.png')} // logo image
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
         {/* Welcome message */}
         <Text style={styles.title}>Welcome Back! 🐾</Text>
+        
         <Text style={styles.subtitle}>Sign in to continue</Text>
 
         {/* Form section for the login with email input field */}
@@ -120,19 +129,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  logo: {
+    width: 380,
+    height: 160,
+    alignSelf: 'center',
+    marginBottom: 20,
+    marginTop: 2,
+  },
+  
   // Title 
   title: {
     fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 10,
-    color: '#333',
+    color: '#111',
+    alignSelf: 'center',
   },
 
   // Subtitles style
   subtitle: {
     fontSize: 16,
     color: '#666',
-    marginBottom: 40,
+    marginBottom: 16,
   },
 
   // Form container
@@ -152,7 +170,7 @@ const styles = StyleSheet.create({
 
   // Primary button (Sign In)
   primaryButton: {
-    backgroundColor: '#4A90E2',
+    backgroundColor: '#F2B949',
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
@@ -160,7 +178,7 @@ const styles = StyleSheet.create({
   },
 
   primaryButtonText: {
-    color: '#fff',
+    color: '#111',
     fontSize: 18,
     fontWeight: '600',
   },
@@ -178,7 +196,7 @@ const styles = StyleSheet.create({
 
   // Blue link 
   linkText: {
-    color: '#4A90E2',
+    color: '#F2B949',
     fontSize: 16,
     fontWeight: '600',
   },
