@@ -1,6 +1,6 @@
 // Import necessary modules and components
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 // main landing page component
 export default function landingPage() {
@@ -10,8 +10,13 @@ export default function landingPage() {
     // main container view of the landing page
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.emoji}>🐾</Text>
-        <Text style={styles.title}>Welcome to PawsMate</Text>
+        <Text style={styles.title}>Welcome to</Text>
+        {/* Logo image */}
+        <Image
+          source={require('@/assets/images/pawsmateLanding.png')} // logo image
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.subtitle}>
           Connect with pet lovers in your area for walks, playdates, and friendship and more!
         </Text>
@@ -63,11 +68,16 @@ const styles = StyleSheet.create({
 
   // title text style
   title: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 15,
-    color: '#333',
+    marginBottom: -2,
+    color: '#000000',
+  },
+
+  logo: {
+    width: 520,
+    height: 240,
+    marginBottom: 2,
   },
 
   // subtitle text style
@@ -85,7 +95,8 @@ const styles = StyleSheet.create({
   },
   // primary button style (Create Account)
   primaryButton: {
-    backgroundColor: '#4A90E2',
+    backgroundColor: '#F2B949',
+    borderColor: '#000000',
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
@@ -93,7 +104,7 @@ const styles = StyleSheet.create({
 
   // primary button text style 
   primaryButtonText: {
-    color: '#fff',
+    color: '#111',
     fontSize: 18,
     fontWeight: '600',
   },
@@ -105,12 +116,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#4A90E2',
+    borderColor: '#111',
   },
 
   // secondary button text style
   secondaryButtonText: {
-    color: '#4A90E2',
+    color: '#111',
     fontSize: 18,
     fontWeight: '600',
   },
