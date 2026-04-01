@@ -52,6 +52,7 @@ export interface User {
     verified: boolean;
     interests: string[];
     petIds: string[];
+    bannerPicture?: string;
 }
 
 // Represent the pet profile
@@ -91,6 +92,7 @@ export interface Pet {
     };
 }
 
+// Represent the Like 
 
 export interface Like {
     id: string;
@@ -103,3 +105,37 @@ export interface Like {
     matched: boolean;
     matchedAt?: Date;
 }
+
+// Represent match 
+
+export interface Match {
+    id: string;
+
+    //store user IDs in an array
+    userIds: string[];
+
+    // store pet Id in an array to see which one was involved in the match
+    petIds: string[];
+
+    createdAt: Date;
+
+    // if false (for example unmatched) it will be hidden from chat list
+    isActive: boolean;
+
+    //In order to show just a preview of the last messages 
+    lastMessage?: string;
+    lastMessageAt?: Date;
+    lastMessageSenderId?: string;
+}
+
+// Represent message
+
+export interface Message {
+    id: string;
+    matchId: string; // which conversation this belongs to
+    senderId: string; // the user sending the mssage 
+    text: string;
+    createdAt: Date;
+    read: boolean; // adding it for future read receipts 
+}
+
