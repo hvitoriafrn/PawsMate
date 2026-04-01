@@ -3,7 +3,7 @@
 // Import necessary modules
 
 import { db } from '@/config/firebase';
-import { Like, Pet, User } from '@/types/database';
+import { Like, Match, Message, Pet, User } from '@/types/database';
 import {
     addDoc,
     arrayRemove,
@@ -12,6 +12,8 @@ import {
     GeoPoint,
     getDoc, getDocs,
     limit,
+    onSnapshot,
+    orderBy,
     query,
     serverTimestamp,
     setDoc,
@@ -19,6 +21,7 @@ import {
     updateDoc,
     where
 } from 'firebase/firestore';
+
 
 
 // Firestore collections
@@ -86,6 +89,7 @@ export const updateUserProfile = async (
         name?: string;
         bio?: string;
         profilePicture?: string;
+        bannerPicture?: string;
   }
 ): Promise<void> => {
   try {
@@ -164,6 +168,19 @@ export const createPet = async ( petData: {
     size?: string,
     gender?:string,
     photo?:string,
+    photos?: string[];
+    personalityTraits?: string[];
+    lookingFor?: string[];
+    healthInfo?: {
+        vaccinated?: boolean;
+        spayedNeutered?: boolean;
+        healthNotes?: string;
+    };
+    verification?: {
+        microchipNumber?: string;
+        verifiedAt?: null;
+        verified?: boolean;
+    };
 }): Promise<string> => {
     try {
         // Get reference to pets collection
@@ -195,14 +212,14 @@ export const createPet = async ( petData: {
             size: petData.size || 'Medium',
             gender: petData.gender || 'Male',
             bio: `Meet ${petData.name}!`,
-            personalityTraits: [],
-            lookingFor: [],
-            healthInfo: {
+            personalityTraits: petData.personalityTraits || [],
+            lookingFor: petData.lookingFor || [],
+            healthInfo: petData.healthInfo || {
                 vaccinated: false,
                 spayedNeutered: false,
                 healthNotes: '',
             },
-            verification: {
+            verification: petData.verification || {
                 verified: false,
                 microchipNumber: '',
                 verifiedAt: null,
@@ -249,12 +266,19 @@ export const updatePet = async (
         size?: string;
         gender?: string;
         photo?: string;
+        photos?: string[];
         bio?: string;
         personalityTraits?: string[];
+        lookingFor?: string[];
         healthInfo?: {
             vaccinated?: boolean;
             spayedNeutered?: boolean;
             healthNotes?: string;
+        };
+        verification?: {
+            microchipNumber?: string;
+            verifiedAt?: Date | null;
+            verified?: boolean;
         };
     }
 ): Promise<void> => {
@@ -310,7 +334,6 @@ export const deletePet = async (petId: string): Promise<void> => {
 }
 
 // Get the active pets (for the explore screen)
-
 export const getActivePets = async (): Promise<Pet[]> => {
     try {
         const petsRef = collection(db, COLLECTIONS.PETS);
@@ -319,6 +342,7 @@ export const getActivePets = async (): Promise<Pet[]> => {
         const q = query(
             petsRef, 
             where('isActive', '==', true),
+            
             //orderBy('createdAt', 'desc')
         );
 
@@ -392,6 +416,7 @@ export const getPetsByOwnerId = async (ownerId: string): Promise<Pet[]> => {
                 size: data.size || 'Medium',
                 gender: data.gender || 'Male',
                 photo: data.photo || 'https://placedog.net/400',
+                photos: Array.isArray(data.photos) ? data.photos : [],
                 bio: data.bio || `Meet ${data.name || 'this pet'}!`,
                 personalityTraits: Array.isArray(data.personalityTraits) ? data.personalityTraits : [],
                 lookingFor: Array.isArray(data.lookingFor) ? data.lookingFor : [],
@@ -451,7 +476,6 @@ export const createLike = async (
             action,
             matched: false,
             createdAt: new Date(),
-            matchedAt: undefined
         };
 
         // Save to firestore with auto-generated ID
@@ -563,9 +587,6 @@ export const updateUserProfilePicture = async (
     }
 };
 
-
-
-
 // An example so I don't forget: 
 
 // converting to firestore data 
@@ -574,6 +595,202 @@ export const updateUserProfilePicture = async (
 
 // converting from firestore data
 // const verifiedDate = timestampToDate(data.verifiedAt);
+
+// check if there's a record of likes that would create a match 
+
+export const checkAndCreateMatch = async (
+
+    likerUserId: string, // the person doing the like
+    likerPetId: string, // which pet
+    likedOwnerId: string, // the owner of the liked pet
+    likePetId: string // the pet that was liked
+): Promise<string | null> => {
+
+    try {
+        const likesRef = collection(db, COLLECTIONS.LIKES);
+
+        // Query to find if the user already liked the pet
+        const q = query(
+            likesRef,
+            where('userId', '==', likedOwnerId), // the other user 
+            where('petId','==', likerPetId), // if they liked my pet
+            where('action', '==', 'like'),
+            limit(1)
+        );
+
+        const snapshot = await getDocs(q)
+
+        // if no mutual likes found, no match 
+        if (snapshot.empty) {
+            console.log('No match yet. User did not like back');
+            return null;
+        }
+
+        // Check if a match already exists between these users
+        const matchesRef = collection(db, COLLECTIONS.MATCHES);
+
+        const existingMatchQuery = query(
+            matchesRef,
+            where('userIds', 'array-contains', likerUserId),
+            where('isActive', '==', true),
+        );
+
+        const existingMatchSnapshot = await getDocs(existingMatchQuery);
+
+        const existingMatch = existingMatchSnapshot.docs.find(doc => 
+            doc.data().userIds.includes(likedOwnerId)
+        );
+
+        if (existingMatch) {
+            console.log('A match between these users already exists: ', existingMatch.id)
+            return existingMatch.id;
+        }
+
+        // match found, then create the doc and log on console for debugging
+        console.log('Mutual like found! Match created')
+
+        // doc() without an ID argument will generate a unique ID
+        const newMatchRef = doc(matchesRef);
+
+        await setDoc(newMatchRef ,{ 
+            id: newMatchRef.id,
+            userIds: [likerUserId,likedOwnerId],
+            petIds: [likerPetId, likePetId],
+            createdAt: Timestamp.now(),
+            isActive: true,
+            lastMessage: null, 
+            lastMessageAt: null,
+            lastMessageSenderId: null,
+        });
+
+        console.log('Match created:', newMatchRef.id);
+        // Returns the ID so explore screen knows which chat to open
+        return newMatchRef.id;
+
+    } catch (error) {
+        console.error('Error in checkAndCreateMatch:', error);
+        return null;
+    }
+};
+
+// Get all active matches for a specific user 
+// This is to show all the conversations in the 'messages screen'
+
+export const getMatchesForUser = async (userId: string): Promise<Match[]> => {
+    try {
+        const matchesRef = collection(db, COLLECTIONS.MATCHES);
+
+        const q = query(
+            matchesRef,
+            where('userIds', 'array-contains', userId), // find the matches where this user is involved
+            where('isActive', '==', true) // only show active matches
+        );
+
+        const snapshot = await getDocs(q);
+
+        // Convert the firestore document
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+
+            // Helper to convert the firestore timestampts to JS date objects
+            const toDate = (ts: any): Date => {
+                if (!ts) return new Date();
+                if (ts instanceof Date) return ts;
+                if (typeof ts.toDate === 'function') return ts.toDate();
+                return new Date(); 
+            };
+
+            return {
+                id: doc.id,
+                userIds: data.userIds || [],
+                petIds: data.petIds || [],
+                createdAt: toDate(data.createdAt),
+                isActive: data.isActive ?? true,
+                lastMessage: data.lastMessage || null,
+                lastMessageAt: data.lastMessageAt ? toDate(data.lastMessageAt) : null,
+                lastMessageSenderId: data.lastMessageSenderId || null,
+            } as Match;
+        });
+
+    } catch (error) {
+        console.error('Error fetching matches:', error);
+        return [];
+    }
+};
+
+// Save message to firestore and update the match doc with the last mesaage preview
+// for the conversations list 
+
+export const sendMessage = async (
+    matchId: string, 
+    senderId: string, 
+    text: string
+): Promise<void> => {
+    try{
+
+        // path to access the subcollection that is inside this match
+        const messagesRef = collection(db, COLLECTIONS.MATCHES, matchId, 'messages');
+
+        // Save the new message
+        await addDoc(messagesRef, {
+            matchId,
+            senderId,
+            text: text.trim(),
+            createdAt: Timestamp.now(),
+            read: false,
+        });
+
+        //Update the parent match doc with the last message preview 
+        const matchRef = doc(db, COLLECTIONS.MATCHES, matchId);
+        await updateDoc(matchRef, {
+            lastMessage: text.trim(),
+            lastMessageAt: Timestamp.now(),
+            lastMessageSenderId: senderId,
+        });
+
+        console.log('Message sent in match:', matchId)
+
+    } catch (error) {
+        console.error('Error sending the message', error);
+        throw error;
+    }
+};
+
+// Set up a real time listener for when users talk in chat
+// Using onSnapshot so it updates it automatically instead of having to manually refresh 
+
+export const subscribeToMessages = (
+    matchId: string, 
+    onMessages: (messages: Message[]) => void  // callback is called every time messages update
+): (() => void) => { 
+
+    const messagesRef = collection(db, COLLECTIONS.MATCHES, matchId, 'messages');
+
+    // sort the messages with oldest at the top and newest at bottom
+    const q = query(messagesRef, orderBy('createdAt', 'asc'));
+
+    // onSnapshot returns the unsubscribe function directly
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+
+        // convert every document to the message type
+        const messages: Message[] = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                matchId: data.matchId, 
+                senderId: data.senderId,
+                text: data.text,
+                createdAt: data.createdAt?.toDate() || new Date(),
+                read: data.read || false,
+            };
+        });
+
+        // Call the callback to update the react state in chat screen
+        onMessages(messages);
+    });
+
+    return unsubscribe;
+}
 
 
 
