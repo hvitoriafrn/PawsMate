@@ -240,7 +240,7 @@ export default function ProfileScreen() {
     if (userLoading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#20B2AA"/>
+                <ActivityIndicator size="large" color="#F2B949"/>
                 <Text style={styles.loadingText}>Loading profile...</Text>
             </View>
         );
@@ -318,7 +318,7 @@ export default function ProfileScreen() {
                         {uploadingAvatar ? (
                             // A spinner shown while uploading
                             <View style={[styles.avatar, styles.avatarLoading]}>
-                                <ActivityIndicator color="#20B2AA"/>
+                                <ActivityIndicator color="#F2B949"/>
                             </View>
                         ) : user.profilePicture ? (
                             <Image
@@ -729,7 +729,7 @@ const styles = StyleSheet.create({
     avatarInitial: {
         fontSize: 36,
         fontWeight: '700',
-        color: '#20B2AA',
+        color: '#000000',
     },
     cameraBadge: {
         position: 'absolute',
@@ -847,9 +847,10 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     sectionTitle: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '700',
         color: '#111',
+        textTransform: 'uppercase',
     },
     addPetBtn: {
         backgroundColor: '#F2B949',
