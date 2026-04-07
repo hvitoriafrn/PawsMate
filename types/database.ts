@@ -53,6 +53,8 @@ export interface User {
     interests: string[];
     petIds: string[];
     bannerPicture?: string;
+    termsAccepted: boolean,
+    termsAcceptedAt: string,
 }
 
 // Represent the pet profile
