@@ -154,7 +154,7 @@ export default function MessagesScreen() {
     if (loading) {
         return (
             <View style={styles.centeredContainer}>
-                <ActivityIndicator size="large" color="#10b981" />
+                <ActivityIndicator size="large" color="#F2B949" />
                 <Text style={styles.loadingText}> Loading conversations... </Text>
             </View>
         );
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     // main container
     container: { 
         flex: 1,
-        backgroundColor: '#f9fafb'
+        backgroundColor: '##f0f0f0'
      },
     
      centeredContainer: {
@@ -240,6 +240,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 16, 
         backgroundColor: 'white',
+        borderRadius: 12,
+        marginHorizontal: 16,
     },
 
     avatar: {
