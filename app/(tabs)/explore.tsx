@@ -333,7 +333,7 @@ export default function ExploreScreen() {
                 <View style={styles.header}>
                     <Text style={styles.title}>Discover Pets</Text>
                     <TouchableOpacity style={styles.filterBtn}>
-                    <Feather name="sliders" size={20} color="#20B2AA" />
+                    <Feather name="sliders" size={18} color="#111" />
                     </TouchableOpacity>
                 </View>
 
@@ -345,7 +345,7 @@ export default function ExploreScreen() {
                     >
                         {loading || seenLoading ? (
                             <View style={styles.loadingState}>
-                                <ActivityIndicator size = "large" color="#10b981"/>
+                                <ActivityIndicator size = "large" color="#F2B949"/>
                                 <Text style={styles.loadingText}>Loading pets...</Text>
                             </View>
                     
@@ -437,9 +437,10 @@ export default function ExploreScreen() {
                                             <Text style={styles.petDetails}>
                                                 {currentPet.breed} • {currentPet.gender} • {currentPet.size}
                                             </Text>
-                                            <Text style={styles.distance}>
-                                                📍 {currentOwner.location}
-                                            </Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                <Feather name="map-pin" size={12} color="#fff" />
+                                                <Text style={styles.distance}>{currentOwner.location}</Text>
+                                            </View>
                                         </View>
                                     </View>
                             
@@ -526,7 +527,7 @@ export default function ExploreScreen() {
                 ) : /* No more pets or owner loading */
                 ownerLoading ? (
                         <View style={styles.centeredState}>
-                            <ActivityIndicator size="large" color="#10b981" />
+                            <ActivityIndicator size="large" color="#F2B949" />
                             <Text style={styles.loadingText}>LoadinG...</Text>
                         </View>
                     ) : (
@@ -692,7 +693,7 @@ const styles = StyleSheet.create ({
         gap: 8,
     },
 
-        lockedText: {
+    lockedText: {
         color: '#fff',
         fontSize: 18,
         fontWeight: '700',
@@ -775,7 +776,7 @@ const styles = StyleSheet.create ({
         left: 0,
         right: 0,
         padding: 16,
-        backgroundColor: 'rgba(0,0,0,0.35)',
+        backgroundColor: 'rgba(0,0,0,0.30)',
     },
 
     petName: {
@@ -789,6 +790,7 @@ const styles = StyleSheet.create ({
         fontSize: 14,
         color: 'white',
         marginBottom: 3,
+        fontWeight: '500',
     },
     
     distance: {
@@ -804,10 +806,12 @@ const styles = StyleSheet.create ({
     },
     
     sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 4,
+    marginBottom: 6,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: '#111',
     },
     
     //Tags
@@ -968,10 +972,10 @@ const styles = StyleSheet.create ({
     },
     
     resetButton: {
-        backgroundColor: '#10b981',
+        backgroundColor: '#F2B949',
         paddingHorizontal: 24,
         paddingVertical: 12,
-        borderRadius: 24,
+        borderRadius: 14,
     },
     
     resetButtonText: {
