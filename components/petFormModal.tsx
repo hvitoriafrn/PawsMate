@@ -364,7 +364,7 @@ const PetFormModal: React.FC<PetFormModalProps> = ({
                             disabled={uploadingPhoto}
                         >
                             {uploadingPhoto
-                            ? <ActivityIndicator color="#20B2AA" />
+                            ? <ActivityIndicator color="#F2B949" />
                             : <Text style={styles.addPhotoBtnText}>+ Add Photo</Text>
                             }
                         </TouchableOpacity>
@@ -770,16 +770,16 @@ const styles = StyleSheet.create({
   }, 
   
   dropdownItemSelected: {
-    backgroundColor: '#e0f5f5',
+    backgroundColor: '#F2B949',
   },
   
   dropdownItemText: {
     fontSize: 15,
-    color: '#333',
+    color: '#111',
   },
   
   dropdownItemTextSelected: {
-    color: '#20B2AA',
+    color: '#111',
     fontWeight: '600',
   },
 
@@ -842,7 +842,7 @@ const styles = StyleSheet.create({
     width: 40, 
     height: 40, 
     borderRadius: 10,
-    backgroundColor: '#20B2AA', 
+    backgroundColor: '#F2B949', 
     alignItems: 'center', 
     justifyContent: 'center',
   },
@@ -909,15 +909,15 @@ const styles = StyleSheet.create({
     height: 90, 
     borderRadius: 10,
     borderWidth: 2, 
-    borderColor: '#20B2AA', 
+    borderColor: '#F2B949', 
     borderStyle: 'dashed',
     alignItems: 'center', 
     justifyContent: 'center', 
-    backgroundColor: '#f0fafa',
+    backgroundColor: '#fff9eb',
   },
 
   addPhotoBtnText: { 
-    color: '#20B2AA', 
+    color: '#111', 
     fontSize: 13, 
     fontWeight: '600' 
   },
@@ -941,8 +941,8 @@ const styles = StyleSheet.create({
   },
 
   checkboxChecked: { 
-    backgroundColor: '#20B2AA', 
-    borderColor: '#20B2AA' 
+    backgroundColor: '#F2B949', 
+    borderColor: '#F2B949' 
   },
 
   checkmark: { 
@@ -1037,7 +1037,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#20B2AA',
+    borderColor: '#111',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1046,7 +1046,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#20B2AA',
+    backgroundColor: '#F2B949',
   },
 
   radioLabel: {
