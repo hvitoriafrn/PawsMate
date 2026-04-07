@@ -1,3 +1,4 @@
+// signup
 // Import the necessary libraries and components 
 import { auth } from '@/config/firebase';
 import { createUserDocument } from '@/services/firebase/firestoreService';
@@ -6,10 +7,11 @@ import { useRouter } from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react';
 import {
-  Alert, KeyboardAvoidingView, Platform,
+  Alert, KeyboardAvoidingView,
+  Linking,
+  Platform,
   ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
-
 
 // Sign Up Screen Component
 export default function SignUpScreen() {
@@ -25,6 +27,9 @@ export default function SignUpScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [bio, setBio] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // For terms and conditions
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   //  Handle user sign up when the sign up button is pressed
   const handleSignUp = async () => {
@@ -49,6 +54,10 @@ export default function SignUpScreen() {
       return;
     }
   
+    if (!termsAccepted) {
+      Alert.alert('Terms Required', 'Please accept the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
     // Start loading state
     setLoading(true);
 
@@ -65,14 +74,15 @@ export default function SignUpScreen() {
       // Log to the console the acct has been created
       console.log('User acct created: ', user.uid);
 
-
       await createUserDocument (
         user.uid,
         email,
         name,
         parseInt(age),
         'Location pending...', 
-        bio || undefined
+        bio || undefined,
+        true,
+        new Date().toISOString()
       );
 
       // Log to the console
@@ -188,6 +198,36 @@ export default function SignUpScreen() {
               numberOfLines={3}
             />
 
+            {/* Terms & Conditions checkbox */}
+            <View style={styles.checkboxRow}> 
+              <TouchableOpacity
+                style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}
+                onPress={() =>
+                  setTermsAccepted(prev => !prev)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: termsAccepted }}
+              >
+                {termsAccepted && <Text style={styles.checkmark}></Text>}
+              </TouchableOpacity>
+              <Text style={styles.checkboxLabel}>
+                I have read and agree to the {''}
+                <Text 
+                  style={styles.link}
+                  onPress={() => Linking.openURL('')}
+                >
+                  Terms of Service
+                </Text>
+                {''}and{''}
+                <Text
+                  style={styles.link}
+                  onPress={() => Linking.openURL('')}
+                >
+                  Privacy Policy
+                </Text>
+                , including how PawsMate processes my personal data under UK GDPR.
+              </Text>
+            </View>
+
             {/* Sign up button*/}
             <TouchableOpacity style={styles.primaryButton} onPress={handleSignUp}>
               <Text style={styles.primaryButtonText}>Create Account</Text>
@@ -288,4 +328,41 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    gap: 10,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderWidth: 2,
+    borderColor: '#10b981',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1, // aligns with first line of text
+    flexShrink: 0,
+  },
+  checkboxChecked: {
+    backgroundColor: '#10b981',
+  },
+  checkmark: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  checkboxLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: '#6b7280',
+    lineHeight: 19,
+  },
+  link: {
+    color: '#10b981',
+    textDecorationLine: 'underline',
+  },
+
 });
