@@ -225,7 +225,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
     container: { 
         flex: 1, 
-        backgroundColor: '#f9fafb' 
+        backgroundColor: '#f0f0f0' 
     },
 
     header: {
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
 
     backIcon: { 
         fontSize: 24, 
-        color: '#10b981' 
+        color: '#F2B949' 
     },
 
     headerUserInfo: { flexDirection: 'row', 
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     },
 
     myBubble: { 
-        backgroundColor: '#10b981', 
+        backgroundColor: '#F2B949', 
         borderBottomRightRadius: 4 
     },
 
@@ -376,13 +376,13 @@ const styles = StyleSheet.create({
         width: 42, 
         height: 42, 
         borderRadius: 21,
-        backgroundColor: '#10b981',
+        backgroundColor: '#F2B949',
         alignItems: 'center', 
         justifyContent: 'center',
     },
 
     sendButtonDisabled: { 
-        backgroundColor: '#d1fae5' 
+        backgroundColor: '#fff0b5' 
     },
 
     sendIcon: { 
