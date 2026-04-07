@@ -1,3 +1,4 @@
+// firestoreService.ts, functions to interact with Firestore database
 // This file includes all the functions required to interact with Firestore
 
 // Import necessary modules
@@ -41,7 +42,9 @@ export const createUserDocument = async (
     name: string,
     age: number,
     location: string,
-    bio?: string
+    bio?: string,
+    termsAccepted: boolean = true,
+    termsAcceptedAt: string = new Date().toISOString(),
 ): Promise<void> => { 
     try {
         // create a reference to save the info
@@ -65,7 +68,9 @@ export const createUserDocument = async (
             isActive: true,
             createdAt: new Date(),
             interests: [],
-            petIds:[]
+            petIds:[],
+            termsAccepted,
+            termsAcceptedAt,
         };
         
         // Save to firestore!
