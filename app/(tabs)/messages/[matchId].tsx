@@ -8,6 +8,7 @@ import {
 } from '@/services/firebase/firestoreService';
 import { useUserStore } from '@/store/userStore';
 import { Message, User } from '@/types/database';
+import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
     useEffect,
@@ -146,33 +147,42 @@ export default function ChatScreen() {
 
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => 
-                    router.back()} style={styles.backButton}>
-                        <Text style={styles.backIcon}> ← </Text>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <Feather name="arrow-left" size={22} color="#F2B949" />
                 </TouchableOpacity>
 
                 {otherUser ? (
                     <View style={styles.headerUserInfo}>
-                        <Image 
-                            source= {{ uri: otherUser.profilePicture }}
-                            style={styles.headerAvatar}
-                        />
+                        {otherUser.profilePicture ? (
+                            <Image
+                                source={{ uri: otherUser.profilePicture }}
+                                style={styles.headerAvatar}
+                            />
+                        ) : (
+                            // Fallback if the profile picture URL is missing
+                            <View style={[styles.headerAvatar, styles.headerAvatarFallback]}>
+                                <Text style={styles.headerAvatarInitial}>
+                                    {otherUser.name?.charAt(0).toUpperCase() || '?'}
+                                </Text>
+                            </View>
+                        )}
                         <View>
-                            <Text style={styles.headerName}> {otherUser.name} </Text>   
-                            <Text style={styles.headerStatus}> Active </Text> 
+                            <Text style={styles.headerName}>{otherUser.name}</Text>
                         </View>
                     </View>
-                ) : ( 
-                    <Text style={styles.headerName}> Chat</Text>
+                ) : (
+                    <Text style={styles.headerName}>Chat</Text>
                 )}
             </View>
 
-            {/* Messages or empty */}
+            {/* Messages or empty state */}
             {messages.length === 0 ? (
                 <View style={styles.emptyChat}>
-                    <Text style={styles.emptyChatIcon}> 🐾 </Text>
+                    <View style={styles.emptyChatIconWrap}>
+                        <Feather name="message-circle" size={28} color="#F2B949" />
+                    </View>
                     <Text style={styles.emptyChatText}>
-                        It's a Match! Send a message to {'\n'} start the conversation!
+                        Say hi to start the conversation!
                     </Text>
                 </View>
             ) : ( 
@@ -212,7 +222,7 @@ export default function ChatScreen() {
 
                     {sending
                         ? <ActivityIndicator size="small" color="white" />
-                        : <Text style={styles.sendIcon}> ➤ </Text>
+                        : <Feather name="send" size={18} color="white" />
                     }
             </TouchableOpacity>
         </View>
@@ -239,36 +249,38 @@ const styles = StyleSheet.create({
         borderBottomColor: '#e5e7eb',
     },
 
-    backButton: { 
-        marginRight: 12, 
-        padding: 4 
-    },
-
-    backIcon: { 
-        fontSize: 24, 
-        color: '#F2B949' 
+    backButton: {
+        marginRight: 12,
+        padding: 4,
     },
 
     headerUserInfo: { flexDirection: 'row', 
         alignItems: 'center' 
     },
 
-    headerAvatar: { 
-        width: 40, 
-        height: 40, 
-        borderRadius: 20, 
-        marginRight: 10 
+    headerAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        marginRight: 10,
     },
 
-    headerName: { 
-        fontSize: 17, 
-        fontWeight: '600', 
-        color: '#111827' 
+    headerAvatarFallback: {
+        backgroundColor: '#FEF3C7',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 
-    headerStatus: { 
-        fontSize: 13, 
-        color: '#10b981' 
+    headerAvatarInitial: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#F2B949',
+    },
+
+    headerName: {
+        fontSize: 17,
+        fontWeight: '600',
+        color: '#111827',
     },
 
     messagesList: { 
@@ -332,21 +344,26 @@ const styles = StyleSheet.create({
     },
 
     emptyChat: {
-        flex: 1, 
+        flex: 1,
         alignItems: 'center',
-        justifyContent: 'center', 
+        justifyContent: 'center',
         padding: 32,
     },
 
-    emptyChatIcon: { 
-        fontSize: 48, 
-        marginBottom: 16 
+    emptyChatIconWrap: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#FEF3C7',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
     },
 
     emptyChatText: {
-        fontSize: 15, 
+        fontSize: 15,
         color: '#6b7280',
-        textAlign: 'center', 
+        textAlign: 'center',
         lineHeight: 22,
     },
 
@@ -385,8 +402,4 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff0b5' 
     },
 
-    sendIcon: { 
-        fontSize: 18, 
-        color: 'white' 
-    },
 });
