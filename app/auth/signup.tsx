@@ -1,314 +1,500 @@
 // signup
-// Import the necessary libraries and components 
 import { auth } from '@/config/firebase';
-import { createUserDocument } from '@/services/firebase/firestoreService';
+import { createUserDocument, getUserById } from '@/services/firebase/firestoreService';
 import { useUserStore } from '@/store/userStore';
+import { Feather } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react';
 import {
-  Alert, KeyboardAvoidingView,
+  Alert,
+  KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
-  ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
-// Sign Up Screen Component
+// Earliest selectable date of birth (100 years ago) and latest (must be 18+)
+const MAX_DOB = (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 18); return d; })();
+const MIN_DOB = (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 100); return d; })();
+
+const formatDob = (date: Date) =>
+  date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+const computeAge = (dob: Date): number => {
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+};
+
 export default function SignUpScreen() {
-  const router = useRouter(); // Router for navigation
-  // Get the functions from Zustand store
-  const { setUser, setError } = useUserStore();
-  
-  // Get the necessary information from the user 
+  const router = useRouter();
+  const { setUser } = useUserStore();
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [age, setAge] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [bio, setBio] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // For terms and conditions
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  //  Handle user sign up when the sign up button is pressed
+  // Date of birth, tempDob tracks the spinner before "Done" is tapped (for iOS only)
+  const [dob, setDob] = useState<Date | null>(null);
+  const [tempDob, setTempDob] = useState<Date>(MAX_DOB);
+  const [showDobPicker, setShowDobPicker] = useState(false);
+
   const handleSignUp = async () => {
-    // Validation to check if all the fields are filled
     if (!name.trim()) {
-        Alert.alert('Error', 'Please enter your name');
-        return;
-    }
-
-    if (!age || isNaN(parseInt(age)) || parseInt(age) < 18) { 
-        Alert.alert('Error','You must be at least 18 years old');
-        return;
-    }
-
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Error','Please fill in all fields');
+      Alert.alert('Error', 'Please enter your name.');
       return;
     }
 
-    if (password.length < 8) {
-      Alert.alert('Error','Password must be at least 8 characters');
+    if (!dob) {
+      Alert.alert('Error', 'Please enter your date of birth.');
       return;
     }
-  
+
+    if (computeAge(dob) < 18) {
+      Alert.alert('Error', 'You must be at least 18 years old to register.');
+      return;
+    }
+
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email address.');
+      return;
+    }
+
+    if (!password.trim() || password.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match.');
+      return;
+    }
+
     if (!termsAccepted) {
-      Alert.alert('Terms Required', 'Please accept the Terms of Service and Privacy Policy to continue.');
+      Alert.alert('Terms required', 'Please accept the Terms of Service and Privacy Policy to continue.');
       return;
     }
-    // Start loading state
+
     setLoading(true);
 
-    // If all the validation passed, try to create account
     try {
       // Sends user's details (email and password to Firebase)
       const userCredential = await createUserWithEmailAndPassword(
-        auth,
+        auth, 
         email, 
         password
-      ); 
-      const user = userCredential.user
-      
-      // Log to the console the acct has been created
+      );
+      const user = userCredential.user;
+
+       // Log to the console the acct has been created
       console.log('User acct created: ', user.uid);
 
-      await createUserDocument (
+      await createUserDocument(
         user.uid,
         email,
         name,
-        parseInt(age),
-        'Location pending...', 
+        computeAge(dob),
+        'Location pending...',
         bio || undefined,
         true,
         new Date().toISOString()
       );
 
-      // Log to the console
       console.log('Firestore doc created');
 
-      setUser({
-        uid: user.uid,
-        email: user.email || '',
-        displayName: name,
-      });
+      // Store the full Firestore user so geopoint is available from the start
+      const firestoreUser = await getUserById(user.uid);
+      setUser(firestoreUser ?? { uid: user.uid, email: user.email || '', displayName: name });
 
-      // if all correct, create user, show a message to user to let them know
       Alert.alert('Success', 'Account created successfully!');
-      // Navigate to main app
-      router.replace('/onboarding/location'); // because of 'replace' the user can't go to signup screen
-      
-      // If any errors occuer, show the error to the user
+      router.replace('/onboarding/location');
+
     } catch (error: any) {
       console.error('Signup error:', error);
 
       let errorMessage = error.message;
-
       if (error.code === 'auth/email-already-in-use') {
-          errorMessage = 'An account linked to this email already exists. Please use login.'
+        errorMessage = 'An account with this email already exists. Please sign in instead.';
       } else if (error.code === 'auth/invalid-email') {
-          errorMessage = 'Invalid email adress format. Please enter a valid email address.'
+        errorMessage = 'Invalid email address format.';
       } else if (error.code === 'auth/weak-password') {
-          errorMessage = 'Password does not meet the requirements. Use at least 8 characters.'
+        errorMessage = 'Password is too weak. Use at least 8 characters.';
       }
-      Alert.alert('Sign Up Failed', error.message);
 
-      // Stops loading
+      Alert.alert('Sign up failed', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-// Render the sign up screen UI
+  // Render the sign up screen UI
   return (
-    // Ensure the keyboard does not cover the input fields
-    <KeyboardAvoidingView 
+    // Ensure the keyboard does not cover input fields
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      {/* Allows scrolling */}
-      <ScrollView contentContainerStyle={styles.scrollContent}> 
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.content}>
-          <Text style={styles.title}>Create Account 🐾</Text>
+          <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Join the PawsMate community</Text>
 
-           {/* Render the form inputs */}
           <View style={styles.form}>
+
+            {/* Full name */}
+            <FieldLabel text="Full name" required />
             <TextInput
               style={styles.input}
-              placeholder="Full Name"
-              placeholderTextColor={'#999'}
+              placeholder="e.g. Robin Scherbatsky"
+              placeholderTextColor="#999"
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
             />
 
-              {/* Input for email */}
+            {/* Email */}
+            <FieldLabel text="Email address" required />
             <TextInput
               style={styles.input}
-              placeholder="Email"
-              placeholderTextColor={'#999'}
+              placeholder="e.g. robin@example.com"
+              placeholderTextColor="#999"
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
             />
-              {/* Password input */}
+
+            {/* Password */}
+            <FieldLabel text="Password" required hint="At least 8 characters" />
             <TextInput
               style={styles.input}
-              placeholder="Password (min 8 characters)"
-              placeholderTextColor={'#999'}
+              placeholder="Create a password"
+              placeholderTextColor="#999"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
-              autoComplete="password"
+              autoComplete="new-password"
             />
-              
-              {/* Confirm password */}
+
+            {/* Confirm password */}
+            <FieldLabel text="Confirm password" required />
             <TextInput
               style={styles.input}
-              placeholder="Confirm Password"
-              placeholderTextColor={'#999'}
+              placeholder="Re-enter your password"
+              placeholderTextColor="#999"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
-              autoComplete="password"
+              autoComplete="new-password"
             />
 
-              {/* Age input */}
-            <TextInput
-              style={styles.input}
-              placeholder="Age"
-              placeholderTextColor={'#999'}
-              value={age}
-              onChangeText={setAge}
-              keyboardType="numeric"
-            />
+            {/* Date of birth */}
+            <FieldLabel text="Date of birth" required hint="You must be 18 or over to register" />
+            <TouchableOpacity
+              style={styles.dobButton}
+              onPress={() => setShowDobPicker(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={dob ? styles.dobText : styles.dobPlaceholder}>
+                {dob ? formatDob(dob) : 'Select your date of birth'}
+              </Text>
+              <Feather name="calendar" size={18} color="#999" />
+            </TouchableOpacity>
 
-              {/* Bio input */}
+            {/* Android: native dialog, shown inline */}
+            {Platform.OS === 'android' && showDobPicker && (
+              <DateTimePicker
+                value={tempDob}
+                mode="date"
+                maximumDate={MAX_DOB}
+                minimumDate={MIN_DOB}
+                onChange={(event, selectedDate) => {
+                  setShowDobPicker(false);
+                  if (event.type === 'set' && selectedDate) {
+                    setDob(selectedDate);
+                    setTempDob(selectedDate);
+                  }
+                }}
+              />
+            )}
+
+            {/* Bio */}
+            <FieldLabel text="Bio" />
             <TextInput
-              style={styles.input}
-              placeholder="It's me, hi, I'm the entirely uninteresting bio."
-              placeholderTextColor={'#999'}
+              style={[styles.input, styles.bioInput]}
+              placeholder="Tell everyone a little about yourself..."
+              placeholderTextColor="#999"
               value={bio}
               onChangeText={setBio}
               multiline
               numberOfLines={3}
+              textAlignVertical="top"
             />
 
-            {/* Terms & Conditions checkbox */}
-            <View style={styles.checkboxRow}> 
+            {/* Terms */}
+            <View style={styles.checkboxRow}>
               <TouchableOpacity
                 style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}
-                onPress={() =>
-                  setTermsAccepted(prev => !prev)}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: termsAccepted }}
+                onPress={() => setTermsAccepted(prev => !prev)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: termsAccepted }}
               >
-                {termsAccepted && <Text style={styles.checkmark}></Text>}
+                {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
               </TouchableOpacity>
               <Text style={styles.checkboxLabel}>
-                I have read and agree to the {''}
-                <Text 
-                  style={styles.link}
-                  onPress={() => Linking.openURL('')}
-                >
+                I have read and agree to the{' '}
+                <Text style={styles.link} onPress={() => Linking.openURL('')}>
                   Terms of Service
                 </Text>
-                {''}and{''}
-                <Text
-                  style={styles.link}
-                  onPress={() => Linking.openURL('')}
-                >
+                {' '}and{' '}
+                <Text style={styles.link} onPress={() => Linking.openURL('')}>
                   Privacy Policy
                 </Text>
                 , including how PawsMate processes my personal data under UK GDPR.
               </Text>
             </View>
 
-            {/* Sign up button*/}
-            <TouchableOpacity style={styles.primaryButton} onPress={handleSignUp}>
-              <Text style={styles.primaryButtonText}>Create Account</Text>
+            <TouchableOpacity
+              style={[styles.primaryButton, loading && styles.primaryButtonDisabled]}
+              onPress={handleSignUp}
+              disabled={loading}
+            >
+              <Text style={styles.primaryButtonText}>
+                {loading ? 'Creating account...' : 'Create Account'}
+              </Text>
             </TouchableOpacity>
-            {/* Link in the footer in case user already has an existing account*/}
+
             <View style={styles.footer}>
               <Text style={styles.footerText}>Already have an account? </Text>
               <TouchableOpacity onPress={() => router.push('/auth/login')}>
                 <Text style={styles.linkText}>Sign In</Text>
               </TouchableOpacity>
             </View>
+
           </View>
         </View>
       </ScrollView>
+
+      {/* iOS spinner inside a bottom sheet modal */}
+      {Platform.OS === 'ios' && (
+        <Modal
+          visible={showDobPicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowDobPicker(false)}
+        >
+          <View style={styles.dobModalOverlay}>
+            <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowDobPicker(false)} />
+            <View style={styles.dobModal}>
+              <View style={styles.dobModalHeader}>
+                <TouchableOpacity onPress={() => setShowDobPicker(false)}>
+                  <Text style={styles.dobModalCancel}>Cancel</Text>
+                </TouchableOpacity>
+                <Text style={styles.dobModalTitle}>Date of Birth</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setDob(tempDob);
+                    setShowDobPicker(false);
+                  }}
+                >
+                  <Text style={styles.dobModalDone}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={tempDob}
+                mode="date"
+                display="spinner"
+                maximumDate={MAX_DOB}
+                minimumDate={MIN_DOB}
+                onChange={(_, selectedDate) => {
+                  if (selectedDate) setTempDob(selectedDate);
+                }}
+                style={{ height: 200 }}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
     </KeyboardAvoidingView>
   );
 }
 
-// Styles for the sign up screen
+// Small helper to render a label row above an input
+function FieldLabel({ text, required, hint }: { text: string; required?: boolean; hint?: string }) {
+  return (
+    <View style={styles.fieldLabelRow}>
+      <Text style={styles.fieldLabel}>
+        {text}
+        {required && <Text style={styles.fieldLabelRequired}> *</Text>}
+      </Text>
+      {hint && <Text style={styles.fieldLabelHint}>{hint}</Text>}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
   },
 
-  // Ensures the content can scroll if needed
   scrollContent: {
     flexGrow: 1,
   },
 
-  // Main content container
   content: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'center',
+    padding: 24,
+    paddingTop: 56,
+    paddingBottom: 40,
   },
 
-  // Title
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    fontSize: 30,
+    fontWeight: '800',
     color: '#111',
+    marginBottom: 6,
     alignSelf: 'center',
+    letterSpacing: -0.5,
   },
 
-  // Subtitle
   subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 40,
+    fontSize: 15,
+    color: '#6b7280',
+    marginBottom: 36,
     alignSelf: 'center',
   },
 
-  // Form container
   form: {
-    gap: 15,
+    gap: 6,
   },
 
-  // Input fields
+  // Field label
+  fieldLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  fieldLabelRequired: {
+    color: '#F2B949',
+    fontWeight: '700',
+  },
+  fieldLabelHint: {
+    fontSize: 11,
+    color: '#9ca3af',
+  },
+
+  // Text inputs
   input: {
-    backgroundColor: '#f5f5f5',
-    padding: 15,
-    borderRadius: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    backgroundColor: '#f9fafb',
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    fontSize: 15,
+    color: '#111',
+    borderWidth: 1.5,
+    borderColor: '#e5e7eb',
   },
 
-  // Primary button
+  bioInput: {
+    height: 90,
+    paddingTop: 12,
+  },
+
+  // Date of birth button
+  dobButton: {
+    backgroundColor: '#f9fafb',
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#e5e7eb',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dobText: {
+    fontSize: 15,
+    color: '#111',
+  },
+  dobPlaceholder: {
+    fontSize: 15,
+    color: '#999',
+  },
+
+  // iOS DOB picker modal
+  dobModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  dobModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 36,
+  },
+  dobModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  dobModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111',
+  },
+  dobModalCancel: {
+    fontSize: 15,
+    color: '#9ca3af',
+  },
+  dobModalDone: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#F2B949',
+  },
+
+  // Buttons
   primaryButton: {
     backgroundColor: '#F2B949',
-    padding: 18,
+    padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 16,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.6,
   },
   primaryButtonText: {
     color: '#111',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
   },
 
   // Footer
@@ -318,41 +504,42 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   footerText: {
-    color: '#666',
-    fontSize: 16,
+    color: '#6b7280',
+    fontSize: 15,
   },
-
-  // text link in the footer
   linkText: {
     color: '#F2B949',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
 
+  // Terms checkbox
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginTop: 12,
+    marginBottom: 4,
     gap: 10,
   },
   checkbox: {
     width: 22,
     height: 22,
     borderWidth: 2,
-    borderColor: '#10b981',
+    borderColor: '#d1d5db',
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1, // aligns with first line of text
+    marginTop: 1,
     flexShrink: 0,
   },
   checkboxChecked: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#F2B949',
+    borderColor: '#F2B949',
   },
   checkmark: {
-    color: 'white',
+    color: '#111',
     fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   checkboxLabel: {
     flex: 1,
@@ -361,8 +548,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   link: {
-    color: '#10b981',
+    color: '#111',
     textDecorationLine: 'underline',
   },
-
 });
