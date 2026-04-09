@@ -1,6 +1,7 @@
 // app/tabs/messages/index.tsx
 // This is where all the matched conversations will be displayed 
 
+import { SCREEN_BG, SCREEN_TITLE } from '@/constants/styles';
 import {
     getMatchesForUser,
     getPetsByOwnerId,
@@ -8,17 +9,20 @@ import {
 } from '@/services/firebase/firestoreService';
 import { useUserStore } from '@/store/userStore';
 import { Match, Pet, User } from '@/types/database';
+import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
-    FlatList,
     Image,
+    RefreshControl,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Combining the match datsa with the other user's profile
 interface ConversationItem {
@@ -105,24 +109,21 @@ export default function MessagesScreen() {
 
         return (
             <TouchableOpacity
-                style={styles.conversationRow} 
+                style={styles.conversationRow}
                 onPress={() => {
-                    // Pass the otherUserId so the chat header can show their name
                     router.push({
                         pathname: '/messages/[matchId]',
                         params: {
-                        matchId: match.id,
-                        otherUserId: otherUser.uid
+                            matchId: match.id,
+                            otherUserId: otherUser.uid,
                         }
                     } as any);
                 }}
-                
                 activeOpacity={0.7}
-                >
-
-                {/* Show the matched pet's photo or their profile photo*/}
+            >
+                {/* Avatar — pet photo in the list, user photo is used in the chat header */}
                 <Image
-                    source={{ uri: otherPet?.photo || otherUser.profilePicture }}
+                    source={{ uri: otherPet?.photos?.[0] || otherPet?.photo || otherUser.profilePicture }}
                     style={styles.avatar}
                 />
 
@@ -130,21 +131,18 @@ export default function MessagesScreen() {
                     <View style={styles.conversationHeader}>
                         <Text style={styles.userName}>{otherUser.name}</Text>
                         {match.lastMessageAt && (
-                        <Text style={styles.timeText}>
-                            {formatTime(match.lastMessageAt)}
-                        </Text>
-                    )}
+                            <Text style={styles.timeText}>
+                                {formatTime(match.lastMessageAt)}
+                            </Text>
+                        )}
                     </View>
 
-                    {/* The pet's name as a subtitle */}
                     {otherPet && (
-                        <Text style={styles.petSubtitle}> 🐾 {otherPet.name}</Text>
+                        <Text style={styles.petSubtitle}>{otherPet.name}</Text>
                     )}
 
-                    {/* Last message preview or a little placeholder message 
-                    if there have been no messages exchanged */}
                     <Text style={styles.lastMessage} numberOfLines={1}>
-                        {match.lastMessage ?? "Start a conversation! Say hi 👋"}
+                        {match.lastMessage ?? "Say hi to start the conversation!"}
                     </Text>
                 </View>
             </TouchableOpacity>
@@ -153,95 +151,119 @@ export default function MessagesScreen() {
 
     if (loading) {
         return (
-            <View style={styles.centeredContainer}>
+            <SafeAreaView style={styles.centeredContainer}>
                 <ActivityIndicator size="large" color="#F2B949" />
-                <Text style={styles.loadingText}> Loading conversations... </Text>
-            </View>
+                <Text style={styles.loadingText}>Loading conversations...</Text>
+            </SafeAreaView>
         );
     }
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}> Messages </Text>
+                <Text style={styles.title}>Messages</Text>
             </View>
 
-            {conversations.length === 0 ? ( 
-                /* No matches at the moment */
+            {conversations.length === 0 ? (
                 <View style={styles.emptyState}>
-                    <Text style={styles.emptyIcon}> 🐾 </Text>
-                    <Text style={styles.emptyTitle}>This feature is locked</Text>
+                    <View style={styles.emptyIconWrap}>
+                        <Feather name="message-circle" size={32} color="#111" />
+                    </View>
+                    <Text style={styles.emptyTitle}>No matches yet</Text>
                     <Text style={styles.emptyText}>
                         Head to Explore to find pets near you.
-                        When you get a match, they will appear here, where you can chat and get to know each other! 
+                        When you get a match they will appear here and you can start chatting!
                     </Text>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.exploreButton}
                         onPress={() => router.push('/(tabs)/explore')}
                     >
-                        <Text style={styles.exploreButtonText}> Find pets near you</Text>
+                        <Text style={styles.exploreButtonText}>Find pets near you</Text>
                     </TouchableOpacity>
                 </View>
-            ) : ( 
-                <FlatList 
-                    data={conversations}
-                    keyExtractor={item => item.match.id}
-                    renderItem={renderConversation}
-                    onRefresh={loadConversations}
-                    refreshing={loading}
-                    ItemSeparatorComponent={() => <View style={styles.separator} />}
-                    contentContainerStyle={styles.listContent}
-                />
+            ) : (
+                <ScrollView
+                    style={styles.scrollArea}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl refreshing={loading} onRefresh={loadConversations} />
+                    }
+                >
+                    <View style={styles.listCard}>
+                        {conversations.map(item => (
+                            <View key={item.match.id}>
+                                {renderConversation({ item })}
+                            </View>
+                        ))}
+                    </View>
+                </ScrollView>
             )}
-        </View>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    // main container
-    container: { 
+    container: {
         flex: 1,
-        backgroundColor: '##f0f0f0'
-     },
-    
-     centeredContainer: {
-        flex: 1, 
-        alignItems: 'center',
-        justifyContent: 'center', 
-        backgroundColor: '#f9fafb',
+        backgroundColor: SCREEN_BG,
     },
 
-    loadingText: { 
-        marginTop: 12, 
-        fontSize: 16, 
-        color: '#6b7280' 
+    centeredContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: SCREEN_BG,
+    },
+
+    loadingText: {
+        marginTop: 12,
+        fontSize: 16,
+        color: '#6b7280'
     },
 
     header: {
-        padding: 16, 
-        paddingTop: 60,
-        backgroundColor: 'white',
-        borderBottomWidth: 1, 
-        borderBottomColor: '#e5e7eb',
+        paddingHorizontal: 18,
+        paddingTop: 12,
+        paddingBottom: 12,
+        backgroundColor: SCREEN_BG,
     },
 
-    title: { 
-        fontSize: 28, 
-        fontWeight: 'bold', 
-        color: '#111827' 
+    title: {
+        ...SCREEN_TITLE,
     },
 
-    listContent: { 
-        paddingVertical: 8 
+    scrollArea: {
+        flex: 1,
+    },
+
+    scrollContent: {
+        paddingHorizontal: 12,
+        paddingTop: 4,
+        paddingBottom: 24,
+    },
+
+    listCard: {
+        marginHorizontal: 0,
+        marginTop: 8,
+        marginBottom: 0,
+        borderRadius: 14,
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOpacity: 0.06,
+        shadowOffset: { width: 0, height: 1 },
+        shadowRadius: 4,
+        elevation: 2,
+        overflow: 'hidden',
     },
 
     conversationRow: {
-        flexDirection: 'row', 
+        flexDirection: 'row',
         alignItems: 'center',
-        padding: 16, 
-        backgroundColor: 'white',
-        borderRadius: 12,
-        marginHorizontal: 16,
+        padding: 16,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
     },
 
     avatar: {
@@ -274,10 +296,10 @@ const styles = StyleSheet.create({
         color: '#9ca3af' 
     },
 
-    petSubtitle: { 
-        fontSize: 13, 
-        color: '#10b981', 
-        marginBottom: 3 
+    petSubtitle: {
+        fontSize: 13,
+        color: '#F2B949',
+        marginBottom: 3
     },
 
     lastMessage: { 
@@ -285,29 +307,29 @@ const styles = StyleSheet.create({
         color: '#6b7280' 
     },
 
-    separator: { 
-        height: 1, 
-        backgroundColor: '#f3f4f6', 
-        marginLeft: 90 
-    },
 
     emptyState: {
-        flex: 1, 
+        flex: 1,
         alignItems: 'center',
-        justifyContent: 'center', 
+        justifyContent: 'center',
         padding: 32,
     },
 
-    emptyIcon: { 
-        fontSize: 64, 
-        marginBottom: 16
+    emptyIconWrap: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#F2B949',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
     },
 
     emptyTitle: {
-        fontSize: 22, 
-        fontWeight: 'bold', 
-        color: '#111827',
-        marginBottom: 8
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#111',
+        marginBottom: 8,
     },
 
     emptyText: {
@@ -315,20 +337,20 @@ const styles = StyleSheet.create({
         fontSize: 15,
         textAlign: 'center',
         lineHeight: 22,
-        marginBottom: 28
+        marginBottom: 28,
     },
 
     exploreButton: {
         backgroundColor: '#F2B949',
         paddingHorizontal: 28,
         paddingVertical: 13,
-        borderRadius: 24 
+        borderRadius: 24,
     },
 
     exploreButtonText: {
-        color: 'black',
+        color: '#111',
         fontSize: 16,
-        fontWeight:'600'
+        fontWeight: '600',
     },
     
 });
