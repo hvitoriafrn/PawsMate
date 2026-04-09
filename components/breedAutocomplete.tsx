@@ -16,12 +16,15 @@ import {
 // Props
 interface BreedAutocompleteProps {
     value: string;
-    onChangeText: (text: string) => void; // called when the text changes
+    onChangeText: (text: string) => void;
+    // When true, the suggestion dropdown appears above the input instead of below.
+    // Useful when the input is near the bottom of the screen to prevent it from being cut off.
+    dropdownAbove?: boolean;
 }
 
-// Component 
-const BreedAutocomplete: React.FC<BreedAutocompleteProps> = ({ 
-    value, onChangeText }) => {
+// Component
+const BreedAutocomplete: React.FC<BreedAutocompleteProps> = ({
+    value, onChangeText, dropdownAbove = false }) => {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [suggestions, setSuggestions] = useState<string[]>([]);
 
@@ -75,7 +78,7 @@ const BreedAutocomplete: React.FC<BreedAutocompleteProps> = ({
 
             {/* Only render when there are suggestions to show */}
             {showSuggestions && (
-                <View style={styles.dropdown}>
+                <View style={[styles.dropdown, dropdownAbove && styles.dropdownAbove]}>
                     {suggestions.map((breed, index) => (
                         <TouchableOpacity
                             key={breed}
@@ -116,21 +119,27 @@ const styles = StyleSheet.create({
   },
 
   dropdown: {
-    position: 'absolute', 
-    top: 48, 
-    left: 0, 
+    position: 'absolute',
+    top: 48,
+    left: 0,
     right: 0,
-    backgroundColor: '#fff', 
-    borderWidth: 1, 
+    backgroundColor: '#fff',
+    borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8, 
+    borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12, 
+    shadowOpacity: 0.12,
     shadowRadius: 6,
-    elevation: 8, 
+    elevation: 8,
     zIndex: 999,
     overflow: Platform.OS === 'android' ? 'hidden' : 'visible',
+  },
+
+  // When the input is near the bottom of the screen, render the dropdown above
+  dropdownAbove: {
+    top: undefined,
+    bottom: 48,
   },
 
   suggestionItem: {
