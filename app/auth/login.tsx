@@ -1,131 +1,159 @@
-// Import necessary modules and components
-import { auth } from '@/config/firebase'; // import firebase auth configuration
-import { useUserStore } from '@/store/userStore'; // import the user store
-import { useRouter } from 'expo-router'; // router for navigation
+// login screen
+import { auth } from '@/config/firebase';
+import { getUserById } from '@/services/firebase/firestoreService';
+import { useUserStore } from '@/store/userStore';
+import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useState } from 'react'; // React state management
+import { useState } from 'react';
 import {
   Alert,
   Image,
-  KeyboardAvoidingView, Platform, StyleSheet,
-  Text, TextInput, TouchableOpacity, View
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
-
-// Login Screen Component
 export default function LoginScreen() {
   const router = useRouter();
-  // Access user store actions
   const { setUser, setLoading, setError } = useUserStore();
-  
-  // Local state for email and password inputs
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  // Handle user login when the login button is pressed
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email address.');
       return;
     }
 
-    // Set loading state to true 
+    if (!password) {
+      Alert.alert('Error', 'Please enter your password.');
+      return;
+    }
+
+    setSubmitting(true);
     setLoading(true);
 
-    // try to sign in with email and password
     try {
-      // Firebase authentication, checks if the details are correct and exists
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      //if correct, it sets the user in the store
-      setUser(userCredential.user);
-      
-      // Navigate to main app
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+
+      // Store the full Firestore user (which includes geopoint) rather than
+      // the Firebase Auth object, so distance filtering works immediately
+      const firestoreUser = await getUserById(userCredential.user.uid);
+      setUser(firestoreUser ?? userCredential.user);
+
       router.replace('/(tabs)');
 
     } catch (error: any) {
-      // if error occurs, log it and set error state
       console.error('Login error:', error);
+
+      let message = 'Something went wrong. Please try again.';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        message = 'Incorrect email or password. Please try again.';
+      } else if (error.code === 'auth/invalid-email') {
+        message = 'Invalid email address format.';
+      } else if (error.code === 'auth/too-many-requests') {
+        message = 'Too many attempts. Please wait a moment before trying again.';
+      }
+
       setError(error.message);
-      // Show error to the user
-      Alert.alert('Login Failed', error.message);
-      
+      Alert.alert('Sign in failed', message);
+
     } finally {
-      // Stops the loading state
+      setSubmitting(false);
       setLoading(false);
     }
   };
 
-  // Render the login form
   return (
-    <KeyboardAvoidingView // pushes the content up when the keyboard opens
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      
       <View style={styles.content}>
-         <Image
-                  source={require('@/assets/images/pawsmateLanding.png')} // logo image
-                  style={styles.logo}
-                  resizeMode="contain"
-                />
-        {/* Welcome message */}
-        <Text style={styles.title}>Welcome Back! 🐾</Text>
-        
+        <Image
+          source={require('@/assets/images/pawsmateLanding.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+
+        <Text style={styles.title}>Welcome back</Text>
         <Text style={styles.subtitle}>Sign in to continue</Text>
 
-        {/* Form section for the login with email input field */}
         <View style={styles.form}>
+
+          <FieldLabel text="Email address" required />
           <TextInput
             style={styles.input}
-            placeholder="Email"
-            placeholderTextColor={'grey'}
+            placeholder="e.g. robin@example.com"
+            placeholderTextColor="#999"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
             autoComplete="email"
+            returnKeyType="next"
           />
-          {/* Password input field */}
+
+          <FieldLabel text="Password" required />
           <TextInput
             style={styles.input}
-            placeholder="Password"
-            placeholderTextColor={'grey'}
+            placeholder="Your password"
+            placeholderTextColor="#999"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
             autoComplete="password"
+            returnKeyType="done"
+            onSubmitEditing={handleLogin}
           />
 
-          {/* Changes the style of the button when touched */}
-          <TouchableOpacity style={styles.primaryButton} onPress={handleLogin}>
-            {/* Sign In button */}
-            <Text style={styles.primaryButtonText}>Sign In</Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]}
+            onPress={handleLogin}
+            disabled={submitting}
+          >
+            <Text style={styles.primaryButtonText}>
+              {submitting ? 'Signing in...' : 'Sign In'}
+            </Text>
           </TouchableOpacity>
 
-          {/* footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => router.push('/auth/signup')}>
               <Text style={styles.linkText}>Sign Up</Text>
             </TouchableOpacity>
           </View>
+
         </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-// Styles for the login screen
+function FieldLabel({ text, required }: { text: string; required?: boolean }) {
+  return (
+    <Text style={styles.fieldLabel}>
+      {text}
+      {required && <Text style={styles.fieldLabelRequired}> *</Text>}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
   },
 
-  // Main content area
   content: {
     flex: 1,
-    padding: 20,
+    padding: 24,
     justifyContent: 'center',
   },
 
@@ -133,71 +161,85 @@ const styles = StyleSheet.create({
     width: 380,
     height: 160,
     alignSelf: 'center',
-    marginBottom: 20,
-    marginTop: 2,
-  },
-  
-  // Title 
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#111',
-    alignSelf: 'center',
-  },
-
-  // Subtitles style
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
     marginBottom: 16,
   },
 
-  // Form container
+  title: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#111',
+    alignSelf: 'center',
+    marginBottom: 6,
+    letterSpacing: -0.5,
+  },
+
+  subtitle: {
+    fontSize: 15,
+    color: '#6b7280',
+    alignSelf: 'center',
+    marginBottom: 32,
+  },
+
   form: {
-    gap: 15,
+    gap: 6,
   },
 
-  // Input styling
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+
+  fieldLabelRequired: {
+    color: '#F2B949',
+    fontWeight: '700',
+  },
+
   input: {
-    backgroundColor: '#f5f5f5',
-    padding: 15,
-    borderRadius: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    backgroundColor: '#f9fafb',
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    fontSize: 15,
+    color: '#111',
+    borderWidth: 1.5,
+    borderColor: '#e5e7eb',
   },
 
-  // Primary button (Sign In)
   primaryButton: {
     backgroundColor: '#F2B949',
-    padding: 18,
+    padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 16,
+  },
+
+  primaryButtonDisabled: {
+    opacity: 0.6,
   },
 
   primaryButtonText: {
     color: '#111',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
   },
 
-  // Footer 
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: 20,
   },
+
   footerText: {
-    color: '#666',
-    fontSize: 16,
+    color: '#6b7280',
+    fontSize: 15,
   },
 
-  // Blue link 
   linkText: {
     color: '#F2B949',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
 });
