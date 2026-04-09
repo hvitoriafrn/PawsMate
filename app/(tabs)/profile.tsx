@@ -5,9 +5,13 @@ import { auth } from '@/config/firebase';
 import { useUser, useUserPets } from '@/hooks/firestore';
 import {
     deletePet,
+    getUserById,
+    updatePetsOwnerGeopoint,
+    updateUserLocation,
     updateUserProfile,
 } from '@/services/firebase/firestoreService';
 import { useUserStore } from '@/store/userStore';
+import { geocodeAddress } from '@/utils/geocoding';
 import { pickImage, uploadImageToStorage } from '@/utils/imageUpload';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -31,8 +35,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
 
-    // get the logged in user 
-    const { user: authUser } = useUserStore();
+    // get the logged in user
+    const { user: authUser, setUser } = useUserStore();
     // Get the user data from firestore using the user id
     const { user, loading: userLoading, refetch: refetchUser} = useUser(authUser?.uid || null);
     // Get all pets owned by this user
@@ -43,6 +47,8 @@ export default function ProfileScreen() {
     // State to store form data when editing
     const [editedName, setEditedName] = useState('');
     const [editedBio, setEditedBio] = useState('');
+    const [editedLocation, setEditedLocation] = useState('');
+    const [locationError, setLocationError] = useState('');
     // Check for profile and pet are being saved
     const [savingProfile, setSavingProfile] = useState(false);
   
@@ -124,13 +130,38 @@ export default function ProfileScreen() {
         if (!authUser?.uid) return;
         if (!editedName.trim()) {
             Alert.alert('Name required', 'Please enter your name.');
+            return;
         }
+
         setSavingProfile(true);
+        setLocationError('');
+
         try {
             await updateUserProfile(authUser.uid, {
                 name: editedName.trim(),
                 bio: editedBio.trim(),
             });
+
+            // Only update location if the user changed it
+            const locationChanged = editedLocation.trim() !== (user?.location || '');
+            if (locationChanged && editedLocation.trim()) {
+                const coords = await geocodeAddress(editedLocation.trim());
+
+                if (!coords) {
+                    setLocationError('Location not found. Try a more specific name.');
+                    setSavingProfile(false);
+                    return;
+                }
+
+                // Update location on the user doc and on all their pets so distance filtering stays correct
+                await updateUserLocation(authUser.uid, coords.latitude, coords.longitude, editedLocation.trim());
+                await updatePetsOwnerGeopoint(authUser.uid, coords.latitude, coords.longitude);
+
+                // Sync updated geopoint into the Zustand store so explore re-filters immediately
+                const refreshed = await getUserById(authUser.uid);
+                if (refreshed) setUser(refreshed);
+            }
+
             await refetchUser();
             setIsEditing(false);
         } catch (error) {
@@ -140,13 +171,15 @@ export default function ProfileScreen() {
         }
     };
 
-    // Cancel edit, discard changes 
+    // Cancel edit, discard changes
     const handleCancelEdit = () =>  {
         // Restore the inputs to the last saved values
         if (user) {
             setEditedName(user.name);
             setEditedBio(user.bio);
+            setEditedLocation(user.location || '');
         }
+        setLocationError('');
         setIsEditing(false);
     };
 
@@ -377,13 +410,17 @@ export default function ProfileScreen() {
                                 </View>
                             </View>
 
-                            <Text style={styles.fieldLabel}> Location </Text>  
+                            <Text style={styles.fieldLabel}> Location </Text>
                             <TextInput
-                                style={styles.fieldInput}
-                                value={user.location}
-                                editable={false}
+                                style={[styles.fieldInput, locationError ? styles.fieldInputError : null]}
+                                value={editedLocation}
+                                onChangeText={(text) => { setEditedLocation(text); setLocationError(''); }}
+                                placeholder="e.g. Battersea, London"
                                 placeholderTextColor="#aaa"
                             />
+                            {locationError ? (
+                                <Text style={styles.fieldErrorText}>{locationError}</Text>
+                            ) : null}
 
                             <Text style={styles.fieldLabel}>Bio</Text>
                             <TextInput
@@ -438,6 +475,8 @@ export default function ProfileScreen() {
                                     // Prefill the fields with existing values
                                     setEditedName(user.name);
                                     setEditedBio(user.bio);
+                                    setEditedLocation(user.location || '');
+                                    setLocationError('');
                                     setIsEditing(true);
                                 }}
                             >
@@ -516,6 +555,18 @@ export default function ProfileScreen() {
                         When enabled, nearby users can see your pets and you can find pets near you.
                     </Text>
                 </View>
+
+                {/* Admin panel link, only visible to admin users */}
+                {user?.isAdmin && (
+                    <TouchableOpacity
+                        style={styles.adminBtn}
+                        onPress={() => router.push('/admin' as any)}
+                    >
+                        <Feather name="shield" size={16} color="#F2B949" />
+                        <Text style={styles.adminBtnText}>Admin panel</Text>
+                        <Feather name="chevron-right" size={16} color="#9ca3af" />
+                    </TouchableOpacity>
+                )}
 
                 {/* Sign out */}
                 <TouchableOpacity
@@ -807,6 +858,14 @@ const styles = StyleSheet.create({
         height: 80,
         paddingTop: 8,
     },
+    fieldInputError: {
+        borderColor: '#ef4444',
+    },
+    fieldErrorText: {
+        fontSize: 12,
+        color: '#ef4444',
+        marginTop: 3,
+    },
     editBtnRow: {
         flexDirection: 'row',
         gap: 10,
@@ -893,6 +952,28 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#6b7280',
         lineHeight: 18,
+    },
+
+    // Admin button
+    adminBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginHorizontal: 12,
+        marginBottom: 10,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#FEF3C7',
+        backgroundColor: '#fffbeb',
+    },
+
+    adminBtnText: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#111',
     },
 
     //Sign out button
