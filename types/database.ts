@@ -24,12 +24,20 @@ export type PersonalityTrait =
   | 'Indoor'
   | 'Outdoor';
 
+export type EventType =
+  | 'Dog Walk'
+  | 'Playdate'
+  | 'Training'
+  | 'Dog Park Meetup'
+  | 'Grooming'
+  | 'General Meetup';
+
 // Types of interactions or connections users might be looking for
   export type LookingFor =
   | 'Playdates' 
   | 'Walking buddies' 
   | 'Hiking buddies'
-  | 'Breeding'
+  //| 'Breeding'
   | 'Training tips'
   | 'Pet sitting exchange'
   | 'Grooming tips';
@@ -55,6 +63,7 @@ export interface User {
     bannerPicture?: string;
     termsAccepted: boolean,
     termsAcceptedAt: string,
+    isAdmin?: boolean;
 }
 
 // Represent the pet profile
@@ -135,9 +144,34 @@ export interface Match {
 export interface Message {
     id: string;
     matchId: string; // which conversation this belongs to
-    senderId: string; // the user sending the mssage 
+    senderId: string; // the user sending the mssage
     text: string;
     createdAt: Date;
-    read: boolean; // adding it for future read receipts 
+    read: boolean; // adding it for future read receipts
+}
+
+// Represent an event (created by admins, visible to all users)
+
+export interface Event {
+    id: string;
+    title: string;
+    description: string;
+    type: EventType;
+    date: Date;
+    location: string;
+    geopoint: {
+        latitude: number;
+        longitude: number;
+    };
+    createdBy: string; // admin user id
+    createdByName?: string; // display name ("PawsMate" for admin)
+    imageUrl?: string; // optional cover photo
+    attendees: string[]; // user ids who joined
+    maxAttendees?: number;
+    breed?: string; // if breed-specific
+    petType?: PetType;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
