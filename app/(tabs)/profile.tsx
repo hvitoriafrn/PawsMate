@@ -11,9 +11,10 @@ import {
     updateUserProfile,
 } from '@/services/firebase/firestoreService';
 import { useUserStore } from '@/store/userStore';
-import { geocodeAddress } from '@/utils/geocoding';
+import { geocodeAddress, reverseGeocode } from '@/utils/geocoding';
 import { pickImage, uploadImageToStorage } from '@/utils/imageUpload';
 import { Feather } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import React, { useState } from 'react';
@@ -59,8 +60,11 @@ export default function ProfileScreen() {
     const [bannerUri, setBannerUri] = useState<string | null>(null);
     const [uploadingBanner, setUploadingBanner] = useState(false);
 
-    // Track whether the user has location sharing enabled
-    const [locationEnabled, setLocationEnabled] = useState(true);
+    // Derive from geopoint, {0,0} means no location set
+    const hasRealLocation = !!(user?.geopoint &&
+        !(user.geopoint.latitude === 0 && user.geopoint.longitude === 0));
+    const [locationEnabled, setLocationEnabled] = useState(hasRealLocation);
+    const [locationUpdating, setLocationUpdating] = useState(false);
 
     // Pull to refresh
     const [refreshing, setRefreshing] = useState(false);
@@ -538,21 +542,55 @@ export default function ProfileScreen() {
                     <Text style={styles.sectionTitle}>Location Settings</Text>
                     <View style={styles.locationRow}>
                         <Text style={styles.locationLabel}>Share my location</Text>
-                        <Switch
-                            value={locationEnabled}
-                            onValueChange={(value) => {
-                                setLocationEnabled(value);
-                                Alert.alert(
-                                    'Location',
-                                    value ? 'Location enabled' : 'Location disabled'
-                                );
-                            }}
-                            trackColor={{ false: '#d1d5db', true: '#00c489' }}
-                            thumbColor="#fff"
-                        />
+                        {locationUpdating
+                            ? <ActivityIndicator size="small" color="#F2B949" />
+                            : <Switch
+                                value={locationEnabled}
+                                onValueChange={async (value) => {
+                                    if (!authUser?.uid) return;
+                                    setLocationUpdating(true);
+                                    try {
+                                        if (value) {
+                                            // Ask for GPS permission
+                                            const { status } = await Location.requestForegroundPermissionsAsync();
+                                            if (status !== 'granted') {
+                                                Alert.alert(
+                                                    'Permission denied',
+                                                    'Please enable location access in your device settings to use this feature.'
+                                                );
+                                                return;
+                                            }
+                                            const pos = await Location.getCurrentPositionAsync({});
+                                            const { latitude, longitude } = pos.coords;
+                                            const displayName = await reverseGeocode(latitude, longitude);
+                                            await updateUserLocation(authUser.uid, latitude, longitude, displayName);
+                                            await updatePetsOwnerGeopoint(authUser.uid, latitude, longitude);
+                                            const refreshed = await getUserById(authUser.uid);
+                                            if (refreshed) setUser(refreshed);
+                                            setLocationEnabled(true);
+                                        } else {
+                                            // Reset geopoint to {0,0} treated as "no location" everywhere
+                                            await updateUserLocation(authUser.uid, 0, 0, '');
+                                            await updatePetsOwnerGeopoint(authUser.uid, 0, 0);
+                                            const refreshed = await getUserById(authUser.uid);
+                                            if (refreshed) setUser(refreshed);
+                                            setLocationEnabled(false);
+                                        }
+                                    } catch (error) {
+                                        Alert.alert('Error', 'Could not update location settings. Please try again.');
+                                    } finally {
+                                        setLocationUpdating(false);
+                                    }
+                                }}
+                                trackColor={{ false: '#d1d5db', true: '#00c489' }}
+                                thumbColor="#fff"
+                            />
+                        }
                     </View>
                     <Text style={styles.locationHelper}>
-                        When enabled, nearby users can see your pets and you can find pets near you.
+                        {locationEnabled
+                            ? 'Your location is active. You can find and be found by nearby pets.'
+                            : 'Location is off. Enable to find pets and events near you.'}
                     </Text>
                 </View>
 

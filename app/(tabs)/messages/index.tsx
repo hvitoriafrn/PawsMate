@@ -121,7 +121,7 @@ export default function MessagesScreen() {
                 }}
                 activeOpacity={0.7}
             >
-                {/* Avatar — pet photo in the list, user photo is used in the chat header */}
+                {/* Avatar, pet photo in the list, user photo is used in the chat header */}
                 <Image
                     source={{ uri: otherPet?.photos?.[0] || otherPet?.photo || otherUser.profilePicture }}
                     style={styles.avatar}
