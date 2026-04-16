@@ -4,7 +4,7 @@
 // Import necessary modules
 
 import { db } from '@/config/firebase';
-import { Like, Match, Message, Pet, User } from '@/types/database';
+import { Event, EventType, Like, Match, Message, Pet, PetType, User } from '@/types/database';
 import {
     addDoc,
     arrayRemove,
@@ -569,6 +569,40 @@ export const TimestampToDate = (timestamp: any): Date => {
     }
 };
 
+// When a user changes their location, update ownerGeopoint on all their active pets
+// so that distance filtering on the explore screen stays accurate
+export const updatePetsOwnerGeopoint = async (
+    userId: string,
+    latitude: number,
+    longitude: number
+): Promise<void> => {
+    try {
+        const petsRef = collection(db, COLLECTIONS.PETS);
+        const q = query(
+            petsRef,
+            where('ownerId', '==', userId),
+            where('isActive', '==', true)
+        );
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) return;
+
+        // Update all pets at the same time
+        await Promise.all(
+            snapshot.docs.map(petDoc =>
+                updateDoc(petDoc.ref, {
+                    ownerGeopoint: new GeoPoint(latitude, longitude),
+                })
+            )
+        );
+
+        console.log('Updated ownerGeopoint for', snapshot.docs.length, 'pets');
+    } catch (error) {
+        console.error('Error updating pets geopoint:', error);
+        throw error;
+    }
+};
+
 export const updateUserProfilePicture = async (
     userId: string,
     data: {
@@ -761,8 +795,225 @@ export const sendMessage = async (
     }
 };
 
+// Get all active events from Firestore
+export const getEvents = async (): Promise<Event[]> => {
+    try {
+        const eventsRef = collection(db, COLLECTIONS.EVENTS);
+        // No orderBy, this avoids needing a composite index; sort client-side instead
+        const q = query(eventsRef, where('isActive', '==', true));
+        const snapshot = await getDocs(q);
+
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            const toDate = (ts: any): Date => {
+                if (!ts) return new Date();
+                if (ts instanceof Date) return ts;
+                if (typeof ts.toDate === 'function') return ts.toDate();
+                return new Date();
+            };
+            return {
+                id: doc.id,
+                ...data,
+                date: toDate(data.date),
+                createdAt: toDate(data.createdAt),
+                updatedAt: toDate(data.updatedAt),
+                attendees: data.attendees || [],
+            } as Event;
+        });
+    } catch (error) {
+        console.error('Error getting events:', error);
+        return [];
+    }
+};
+
+// Create a new event (admin only)
+export const createEvent = async (data: {
+    title: string;
+    description: string;
+    type: EventType;
+    date: Date;
+    location: string;
+    latitude: number;
+    longitude: number;
+    maxAttendees?: number;
+    breed?: string;
+    petType?: PetType;
+    createdBy: string;
+    createdByName?: string;
+    imageUrl?: string;
+}): Promise<string> => {
+    try {
+        const eventsRef = collection(db, COLLECTIONS.EVENTS);
+        const newRef = doc(eventsRef);
+        const now = new Date();
+
+        await setDoc(newRef, {
+            id: newRef.id,
+            title: data.title,
+            description: data.description,
+            type: data.type,
+            date: Timestamp.fromDate(data.date),
+            location: data.location,
+            geopoint: new GeoPoint(data.latitude, data.longitude),
+            createdBy: data.createdBy,
+            createdByName: data.createdByName || 'PawsMate',
+            imageUrl: data.imageUrl || null,
+            attendees: [],
+            maxAttendees: data.maxAttendees || null,
+            breed: data.breed || null,
+            petType: data.petType || null,
+            isActive: true,
+            createdAt: Timestamp.fromDate(now),
+            updatedAt: Timestamp.fromDate(now),
+        });
+
+        console.log('Event created:', newRef.id);
+        return newRef.id;
+    } catch (error) {
+        console.error('Error creating event:', error);
+        throw error;
+    }
+};
+
+// Update an existing event (admin only)
+export const updateEvent = async (eventId: string, data: Partial<{
+    title: string;
+    description: string;
+    type: EventType;
+    date: Date;
+    location: string;
+    latitude: number;
+    longitude: number;
+    maxAttendees: number;
+    breed: string;
+    petType: PetType;
+    imageUrl: string;
+}>): Promise<void> => {
+    try {
+        const eventRef = doc(db, COLLECTIONS.EVENTS, eventId);
+        const update: any = { ...data, updatedAt: serverTimestamp() };
+
+        // Convert date to Timestamp if provided
+        if (data.date) update.date = Timestamp.fromDate(data.date);
+
+        // Convert lat/lon to GeoPoint if provided
+        if (data.latitude !== undefined && data.longitude !== undefined) {
+            update.geopoint = new GeoPoint(data.latitude, data.longitude);
+            delete update.latitude;
+            delete update.longitude;
+        }
+
+        // Firestore rejects undefined values, replace with null
+        for (const key of Object.keys(update)) {
+            if (update[key] === undefined) update[key] = null;
+        }
+
+        await updateDoc(eventRef, update);
+        console.log('Event updated:', eventId);
+    } catch (error) {
+        console.error('Error updating event:', error);
+        throw error;
+    }
+};
+
+// Soft-delete an event (admin only)
+export const deleteEvent = async (eventId: string): Promise<void> => {
+    try {
+        const eventRef = doc(db, COLLECTIONS.EVENTS, eventId);
+        await updateDoc(eventRef, { isActive: false, updatedAt: serverTimestamp() });
+        console.log('Event deleted:', eventId);
+    } catch (error) {
+        console.error('Error deleting event:', error);
+        throw error;
+    }
+};
+
+// Join an event
+export const joinEvent = async (eventId: string, userId: string): Promise<void> => {
+    try {
+        const eventRef = doc(db, COLLECTIONS.EVENTS, eventId);
+        await updateDoc(eventRef, { attendees: arrayUnion(userId) });
+    } catch (error) {
+        console.error('Error joining event:', error);
+        throw error;
+    }
+};
+
+// Leave an event
+export const leaveEvent = async (eventId: string, userId: string): Promise<void> => {
+    try {
+        const eventRef = doc(db, COLLECTIONS.EVENTS, eventId);
+        await updateDoc(eventRef, { attendees: arrayRemove(userId) });
+    } catch (error) {
+        console.error('Error leaving event:', error);
+        throw error;
+    }
+};
+
+// Get pets with pending microchip verification (admin only)
+export const getPendingVerificationPets = async (): Promise<Pet[]> => {
+    try {
+        const petsRef = collection(db, COLLECTIONS.PETS);
+        const q = query(
+            petsRef,
+            where('isActive', '==', true),
+            where('verification.verified', '==', false),
+        );
+        const snapshot = await getDocs(q);
+
+        const toDate = (ts: any): Date => {
+            if (!ts) return new Date();
+            if (ts instanceof Date) return ts;
+            if (typeof ts.toDate === 'function') return ts.toDate();
+            return new Date();
+        };
+
+        // Only return pets that actually have a microchip number submitted
+        return snapshot.docs
+            .map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: toDate(data.createdAt),
+                    updatedAt: toDate(data.updatedAt),
+                    verification: {
+                        verified: data.verification?.verified || false,
+                        microchipNumber: data.verification?.microchipNumber || '',
+                        verifiedAt: data.verification?.verifiedAt ? toDate(data.verification.verifiedAt) : null,
+                    },
+                } as Pet;
+            })
+            .filter(pet => pet.verification.microchipNumber && pet.verification.microchipNumber.trim() !== '');
+    } catch (error) {
+        console.error('Error getting pending verifications:', error);
+        return [];
+    }
+};
+
+// Approve or reject a microchip verification (admin only)
+export const updatePetVerification = async (
+    petId: string,
+    approved: boolean,
+    adminId: string
+): Promise<void> => {
+    try {
+        const petRef = doc(db, COLLECTIONS.PETS, petId);
+        await updateDoc(petRef, {
+            'verification.verified': approved,
+            'verification.verifiedAt': approved ? Timestamp.now() : null,
+            'verification.verifiedBy': approved ? adminId : null,
+            updatedAt: serverTimestamp(),
+        });
+        console.log(`Pet ${petId} verification ${approved ? 'approved' : 'rejected'}`);
+    } catch (error) {
+        console.error('Error updating verification:', error);
+        throw error;
+    }
+};
+
 // Set up a real time listener for when users talk in chat
-// Using onSnapshot so it updates it automatically instead of having to manually refresh 
+// Using onSnapshot so it updates it automatically instead of having to manually refresh
 
 export const subscribeToMessages = (
     matchId: string, 
