@@ -28,9 +28,15 @@ export const useActivePets = ({ maxDistance }: UseActivePetsProps = {}) => {
     const { user } = useUserStore();
    
 
-    useEffect(() => { 
-        fetchPets(); // Gets the data immediately
-    }, [maxDistance]);
+    // Re-fetch when the radius changes or when the user's own geopoint changes
+    // (like when a user updates their location from the profile screen)
+    const geoKey = user?.geopoint
+        ? `${user.geopoint.latitude},${user.geopoint.longitude}`
+        : null;
+
+    useEffect(() => {
+        fetchPets();
+    }, [maxDistance, geoKey]);
 
     const fetchPets = async () => {
         try {
@@ -42,10 +48,14 @@ export const useActivePets = ({ maxDistance }: UseActivePetsProps = {}) => {
 
             const fetchedPets = await getActivePets();
 
-           if (!maxDistance || !user?.geopoint) {
+           // Skip distance filtering if no radius set, no geopoint, or geopoint is still
+           // the 0,0 placeholder set at signup before the user has added a real location
+           const hasRealLocation = user?.geopoint &&
+               !(user.geopoint.latitude === 0 && user.geopoint.longitude === 0);
+
+           if (!maxDistance || !hasRealLocation) {
                 setPets(fetchedPets);
-                // Log to console 
-                console.log('Fetched ${fetchedPets.length} pets');
+                console.log(`Fetched ${fetchedPets.length} pets (no location filter)`);
                 return;
            }
            
