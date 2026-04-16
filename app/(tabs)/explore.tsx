@@ -1,7 +1,8 @@
 // Explore screen that shows all active pets available for matching for the like / pass
 
-// Import necessary modules
+import BreedAutocomplete from '@/components/breedAutocomplete';
 import { db } from '@/config/firebase';
+import { SCREEN_BG, SCREEN_TITLE } from '@/constants/styles';
 import { useActivePets } from '@/hooks/firestore';
 import {
     checkAndCreateMatch,
@@ -10,7 +11,7 @@ import {
     getUserById
 } from '@/services/firebase/firestoreService';
 import { useUserStore } from '@/store/userStore'; // this gets the current logged in user
-import { Pet, User } from '@/types/database';
+import { LookingFor, Pet, User } from '@/types/database';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
@@ -37,7 +38,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// 
+const RADIUS_OPTIONS = [5, 10, 25, 50] as const;
+
+const LOOKING_FOR_OPTIONS: LookingFor[] = [
+    'Playdates',
+    'Walking buddies',
+    'Hiking buddies',
+    //'Breeding',
+    'Training tips',
+    'Pet sitting exchange',
+    'Grooming tips',
+];
+
 const getSeenPetsKey = (userId: string) => `seenPets_${userId}`;
 
 // Load the seen pet ids, checks asyncStorage, Firestore only if that fails
@@ -104,26 +116,50 @@ export default function ExploreScreen() {
 
     // Control the modal for 'its a match' popup
     const [showMatchModal, setShowMatchModal] = useState<boolean>(false);
-    // Stores the newly created Match 
+    // Stores the newly created Match
     const [newMatchId, setNewMatchId] = useState<string | null>(null);
 
-    // Get all the active pets from Firestore
+    // Filter state, draft is what the user is editing in the sheet
+    // active is what's currently applied to the card stack
+    const [showFilters, setShowFilters] = useState(false);
+    const [draftRadius, setDraftRadius] = useState(10);
+    const [draftLookingFor, setDraftLookingFor] = useState<LookingFor[]>([]);
+    const [draftBreed, setDraftBreed] = useState('');
+    const [activeRadius, setActiveRadius] = useState(10);
+    const [activeLookingFor, setActiveLookingFor] = useState<LookingFor[]>([]);
+    const [activeBreed, setActiveBreed] = useState('');
+
+    // Get all the active pets from Firestore, the radius is driven by active filter
     const { pets: allPets, loading, error, refetch } = useActivePets({
-        maxDistance: 10, // in kilometers
+        maxDistance: activeRadius,
     });
-    // Get the current logged in users from Zustand 
+    // Get the current logged in users from Zustand
     const { user } = useUserStore();
-    //filter out the user's own pets
-    const pets = allPets.filter(pet => pet.ownerId !== user?.uid );
-    // the pet currently being showed 
-    const currentPet = unseenPets[currentIndex];
-    
+
+    // Strip out the user's own pets, then apply lookingFor / breed filters client-side
+    const pets = allPets.filter(pet => pet.ownerId !== user?.uid);
+
+    const displayPets = unseenPets.filter(pet => {
+        if (activeLookingFor.length > 0 && !activeLookingFor.some(tag => pet.lookingFor.includes(tag))) return false;
+        if (activeBreed.trim() && !pet.breed.toLowerCase().includes(activeBreed.trim().toLowerCase())) return false;
+        return true;
+    });
+
+    // the pet currently being showed
+    const currentPet = displayPets[currentIndex];
+
     // Build the photos array for the pet
     const currentPhotos = currentPet
     ? (currentPet.photos && currentPet.photos.length > 0
         ? currentPet.photos
         : currentPet.photo ? [currentPet.photo] : [])
     : [];
+
+    // How many non-default filters are active, drives the badge on the filter button
+    const activeFilterCount =
+        (activeRadius !== 10 ? 1 : 0) +
+        activeLookingFor.length +
+        (activeBreed.trim() ? 1 : 0);
 
     // Load the user's first pet ID, needed for the like
     useFocusEffect(
@@ -149,7 +185,14 @@ export default function ExploreScreen() {
 
     // Filter the seen pets
     useEffect(() => {
-        if (!user?.uid || loading || pets.length === 0) return;
+        if (!user?.uid || loading) return;
+
+        // Still run when pets is empty so seenLoading gets cleared
+        if (pets.length === 0) {
+            setUnseenPets([]);
+            setSeenLoading(false);
+            return;
+        }
 
         const filterSeenPets = async () => {
             try {
@@ -169,7 +212,7 @@ export default function ExploreScreen() {
         };
 
         filterSeenPets(); 
-    }, [user?.uid, pets.length]);
+    }, [user?.uid, pets.length, loading]);
 
     // Function for when pet changes, the owner is fetched for that pet (changing it too)
     useEffect(() => {
@@ -320,20 +363,59 @@ export default function ExploreScreen() {
         }
     };
 
-    // User chooses to 'keep exploring' instead 
+    // User chooses to 'keep exploring' instead
     const handleDismissMatch = () => {
         setShowMatchModal(false);
         advanceCard();
-    }
+    };
 
-    // render 
+    // Reset the card stack whenever the client-side filters change
+    useEffect(() => {
+        setCurrentIndex(0);
+        setPhotoIndex(0);
+    }, [activeLookingFor, activeBreed]);
+
+    // Open the filter sheet, pre-populating draft values with what's currently active
+    const openFilters = () => {
+        setDraftRadius(activeRadius);
+        setDraftLookingFor([...activeLookingFor]);
+        setDraftBreed(activeBreed);
+        setShowFilters(true);
+    };
+
+    const toggleLookingFor = (tag: LookingFor) => {
+        setDraftLookingFor(prev =>
+            prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+        );
+    };
+
+    const applyFilters = () => {
+        setActiveRadius(draftRadius);
+        setActiveLookingFor(draftLookingFor);
+        setActiveBreed(draftBreed);
+        setCurrentIndex(0);
+        setShowFilters(false);
+    };
+
+    const clearFilters = () => {
+        setDraftRadius(10);
+        setDraftLookingFor([]);
+        setDraftBreed('');
+    };
+
+    // render
     return (
         <SafeAreaView style={styles.safeArea}>
             {/* Header */}
                 <View style={styles.header}>
                     <Text style={styles.title}>Discover Pets</Text>
-                    <TouchableOpacity style={styles.filterBtn}>
-                    <Feather name="sliders" size={18} color="#111" />
+                    <TouchableOpacity style={styles.filterBtn} onPress={openFilters}>
+                        <Feather name="sliders" size={18} color="#111" />
+                        {activeFilterCount > 0 && (
+                            <View style={styles.filterBadge}>
+                                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                            </View>
+                        )}
                     </TouchableOpacity>
                 </View>
 
@@ -406,7 +488,7 @@ export default function ExploreScreen() {
                                         </View>
                                         )}
                                         
-                                        {/* Info button — top right */}
+                                        {/* Info button by top right */}
                                         <TouchableOpacity style={styles.infoBtn}>
                                         <Feather name="info" size={16} color="#666" />
                                         </TouchableOpacity>
@@ -476,7 +558,7 @@ export default function ExploreScreen() {
                                             <Feather
                                                 name={currentPet.healthInfo.vaccinated ? 'check-circle' : 'circle'}
                                                 size={16}
-                                                color={currentPet.healthInfo.vaccinated ? '#20B2AA' : '#9CA3AF'}
+                                                color={currentPet.healthInfo.vaccinated ? '#F2B949' : '#9CA3AF'}
                                             />
                                             <Text style={styles.healthText}>
                                                 Vaccinated: {currentPet.healthInfo.vaccinated ? 'Yes' : 'No'}
@@ -486,7 +568,7 @@ export default function ExploreScreen() {
                                             <Feather
                                                 name={currentPet.healthInfo.spayedNeutered ? 'check-circle' : 'circle'}
                                                 size={16}
-                                                color={currentPet.healthInfo.spayedNeutered ? '#20B2AA' : '#9CA3AF'}
+                                                color={currentPet.healthInfo.spayedNeutered ? '#F2B949' : '#9CA3AF'}
                                             />
                                             <Text style={styles.healthText}>
                                                 Spayed/Neutered: {currentPet.healthInfo.spayedNeutered ? 'Yes' : 'No'}
@@ -528,22 +610,34 @@ export default function ExploreScreen() {
                 ownerLoading ? (
                         <View style={styles.centeredState}>
                             <ActivityIndicator size="large" color="#F2B949" />
-                            <Text style={styles.loadingText}>LoadinG...</Text>
+                            <Text style={styles.loadingText}>Loading...</Text>
                         </View>
                     ) : (
                         //Empty state after there are no more new pets
                         <View style={styles.centeredState}>
-                            <Text style={{ fontSize: 48, marginBottom: 16 }}>🐾</Text>
-                            <Text style={styles.emptyStateTitle}>You've seen all pets!</Text>
-                            <Text style={styles.emptyStateText}>
-                                Check back soon for new profiles!
-                            </Text>
+                            <View style={styles.emptyIconWrap}>
+                                <Feather name="search" size={28} color="#111" />
+                            </View>
+                            <Text style={styles.emptyStateTitle}>
+                            {displayPets.length === 0 && unseenPets.length === 0
+                                ? 'No pets nearby'
+                                : 'You\'ve seen all pets!'}
+                        </Text>
+                        <Text style={styles.emptyStateText}>
+                            {displayPets.length === 0 && unseenPets.length === 0
+                                ? `No pets found within ${activeRadius} km. Try increasing the search radius in filters.`
+                                : 'Check back soon for new profiles!'}
+                        </Text>
                         {/* Button to check if new pets were added */}
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.resetButton}
-                            onPress={refetch}  // Re-fetch from Firestore
+                            onPress={refetch}
                         >
-                            <Text style={styles.resetButtonText}>Check for New Pets</Text>
+                            <Text style={styles.resetButtonText}>
+                                {displayPets.length === 0 && unseenPets.length === 0
+                                    ? 'Refresh'
+                                    : 'Check for New Pets'}
+                            </Text>
                         </TouchableOpacity>
                     </View>
                     )}
@@ -558,7 +652,9 @@ export default function ExploreScreen() {
     > 
         <View style={styles.modalOverlay}>
             <View style={styles.matchCard}>
-                <Text style={styles.matchHeart}>💚</Text>
+                <View style={styles.matchIconWrap}>
+                    <Feather name="heart" size={32} color="#111" />
+                </View>
                 <Text style={styles.matchTitle}>It's a Match!</Text>
                 <Text style={styles.matchSubtitle}>
                     You and {currentOwner?.name} liked each other's pets!
@@ -586,8 +682,92 @@ export default function ExploreScreen() {
             </View>
         </View>
     </Modal>
+
+    {/* Filter bottom sheet */}
+    <Modal
+        visible={showFilters}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFilters(false)}
+    >
+        <View style={{ flex: 1 }}>
+            {/* Tap outside to close */}
+            <TouchableOpacity
+                style={styles.filterOverlay}
+                activeOpacity={1}
+                onPress={() => setShowFilters(false)}
+            />
+
+            <View style={styles.filterSheet}>
+                {/* Handle bar */}
+                <View style={styles.filterHandle} />
+
+                {/* Sheet header */}
+                <View style={styles.filterHeader}>
+                    <Text style={styles.filterTitle}>Filters</Text>
+                    <TouchableOpacity onPress={clearFilters}>
+                        <Text style={styles.filterClearAll}>Clear all</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+
+                    {/* Radius */}
+                    <Text style={styles.filterSectionLabel}>Search radius</Text>
+                    <View style={styles.filterChipRow}>
+                        {RADIUS_OPTIONS.map(km => (
+                            <TouchableOpacity
+                                key={km}
+                                style={[styles.filterChip, draftRadius === km && styles.filterChipActive]}
+                                onPress={() => setDraftRadius(km)}
+                            >
+                                <Text style={[styles.filterChipText, draftRadius === km && styles.filterChipTextActive]}>
+                                    {km} km
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    {/* Looking For */}
+                    <Text style={styles.filterSectionLabel}>Looking for</Text>
+                    <View style={styles.filterChipRow}>
+                        {LOOKING_FOR_OPTIONS.map(option => {
+                            const selected = draftLookingFor.includes(option);
+                            return (
+                                <TouchableOpacity
+                                    key={option}
+                                    style={[styles.filterChip, selected && styles.filterChipActive]}
+                                    onPress={() => toggleLookingFor(option)}
+                                >
+                                    <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
+                                        {option}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    {/* Breed */}
+                    <Text style={styles.filterSectionLabel}>Breed</Text>
+                    <BreedAutocomplete
+                        value={draftBreed}
+                        onChangeText={setDraftBreed}
+                        dropdownAbove
+                    />
+
+                </ScrollView>
+
+                <TouchableOpacity style={styles.filterApplyBtn} onPress={applyFilters}>
+                    <Text style={styles.filterApplyBtnText}>
+                        Show results{activeFilterCount > 0 ? ` · ${activeFilterCount} active` : ''}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+    </Modal>
+
 </SafeAreaView>
-            
+
     );
 }
 
@@ -596,36 +776,32 @@ const styles = StyleSheet.create ({
 
     safeArea: {
         flex: 1,
-        backgroundColor: '#f0f0f0'
+        backgroundColor: SCREEN_BG,
     },
 
     //Header
     header: {
-        flexDirection:'row',
-        justifyContent:'space-between',
-        alignItems:'center',
-        paddingTop: 20,
-        backgroundColor: '#f0f0f0',
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-        marginLeft: 12,
-        marginRight: 12,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: 12,
+        paddingBottom: 4,
+        backgroundColor: SCREEN_BG,
+        paddingHorizontal: 18,
     },
-    
+
     title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#111827',
+        ...SCREEN_TITLE,
     },
     
     scrollContainer: {
         flex: 1,
     },
     
-     filterBtn: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
+    filterBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: '#fff',
         alignItems: 'center',
         justifyContent: 'center',
@@ -634,6 +810,7 @@ const styles = StyleSheet.create ({
         shadowOpacity: 0.08,
         shadowRadius: 3,
         elevation: 2,
+        position: 'relative',
     },
 
     // Pet card styles
@@ -653,6 +830,7 @@ const styles = StyleSheet.create ({
         padding: 12,
         alignItems: 'center',
         paddingBottom: 32,
+        borderRadius: 20,
         },
 
     // Photo section
@@ -840,7 +1018,7 @@ const styles = StyleSheet.create ({
         paddingVertical: 6,
         borderRadius: 16,
         borderWidth:1, 
-        borderColor:'#F5A623',
+        borderColor:'#F2B949',
     },
     
     lookingForTagText: {
@@ -944,6 +1122,16 @@ const styles = StyleSheet.create ({
         padding: 32,
         marginTop: 80,
     },
+
+    emptyIconWrap: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#F2B949',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+    },
     
     loadingState: {
     alignItems: 'center',
@@ -977,16 +1165,16 @@ const styles = StyleSheet.create ({
         paddingVertical: 12,
         borderRadius: 14,
     },
-    
+
     resetButtonText: {
-        color: 'white',
+        color: '#111',
         fontSize: 16,
         fontWeight: '600',
     },
 
     // Match modal
-    modalOverlay:{
-        flex:1,
+    modalOverlay: {
+        flex: 1,
         backgroundColor: 'rgba(0,0,0,0.6)',
         alignItems: 'center',
         justifyContent: 'center',
@@ -994,61 +1182,184 @@ const styles = StyleSheet.create ({
     },
 
     matchCard: {
-        backgroundColor: 'white', 
+        backgroundColor: 'white',
         borderRadius: 24,
-        padding: 32, 
-        alignItems: 'center', 
+        padding: 32,
+        alignItems: 'center',
         width: '100%',
     },
 
-    matchHeart: { 
-        fontSize: 56, 
-        marginBottom: 12 
+    matchIconWrap: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: '#F2B949',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
     },
-    
-    matchTitle: { 
-        fontSize: 26, 
-        fontWeight: 'bold', 
-        color: '#111827', 
-        marginBottom: 8 
+
+    matchTitle: {
+        fontSize: 26,
+        fontWeight: '800',
+        color: '#111',
+        marginBottom: 8,
     },
 
     matchSubtitle: {
-        fontSize: 15, 
+        fontSize: 15,
         color: '#6b7280',
-        textAlign: 'center', 
+        textAlign: 'center',
         marginBottom: 4,
     },
 
     matchPetName: {
-        fontSize: 14, 
-        color: '#10b981', 
+        fontSize: 14,
+        color: '#F2B949',
         fontWeight: '600',
-        textAlign: 'center', 
+        textAlign: 'center',
         marginBottom: 24,
     },
 
     chatButton: {
-        backgroundColor: '#10b981', 
+        backgroundColor: '#F2B949',
         width: '100%',
-        paddingVertical: 14, 
+        paddingVertical: 14,
         borderRadius: 12,
-        alignItems: 'center', 
+        alignItems: 'center',
         marginBottom: 10,
     },
 
-    chatButtonText: { 
-        color: 'white', 
-        fontSize: 16, 
-        fontWeight: '600', 
+    chatButtonText: {
+        color: '#111',
+        fontSize: 16,
+        fontWeight: '600',
     },
 
-    keepExploringButton: { 
-        paddingVertical: 8 
+    keepExploringButton: {
+        paddingVertical: 8,
     },
-    
+
     keepExploringText: {
-         color: '#6b7280', 
-         fontSize: 14
-        },
+        color: '#6b7280',
+        fontSize: 14,
+    },
+
+    // Filter button badge
+    filterBadge: {
+        position: 'absolute',
+        top: 4,
+        right: 4,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: '#F2B949',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    filterBadgeText: {
+        fontSize: 9,
+        fontWeight: '700',
+        color: '#111',
+    },
+
+    // Filter bottom sheet
+    filterOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+    },
+
+    filterSheet: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingHorizontal: 20,
+        paddingBottom: 36,
+        maxHeight: '80%',
+    },
+
+    filterHandle: {
+        width: 36,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: '#e5e7eb',
+        alignSelf: 'center',
+        marginTop: 10,
+        marginBottom: 16,
+    },
+
+    filterHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+
+    filterTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111',
+    },
+
+    filterClearAll: {
+        fontSize: 14,
+        color: '#9ca3af',
+        fontWeight: '500',
+    },
+
+    filterSectionLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+        color: '#111',
+        marginBottom: 10,
+        marginTop: 20,
+    },
+
+    filterChipRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+
+    filterChip: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1.5,
+        borderColor: '#e5e7eb',
+        backgroundColor: '#fff',
+    },
+
+    filterChipActive: {
+        backgroundColor: '#F2B949',
+        borderColor: '#F2B949',
+    },
+
+    filterChipText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#374151',
+    },
+
+    filterChipTextActive: {
+        color: '#111',
+        fontWeight: '600',
+    },
+
+    filterApplyBtn: {
+        backgroundColor: '#F2B949',
+        padding: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginTop: 16,
+    },
+
+    filterApplyBtnText: {
+        color: '#111',
+        fontSize: 16,
+        fontWeight: '700',
+    },
 });
