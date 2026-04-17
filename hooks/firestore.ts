@@ -1,12 +1,8 @@
 // Here go the react hooks related to Firestore
 
 // Import the necessary modules
-import {
-    getActivePets,
-    getAllUsers,
-    getPetsByOwnerId,
-    getUserById
-} from '@/services/firebase/firestoreService';
+import { getActivePets, getPetsByOwnerId } from '@/services/firebase/petService';
+import { getAllUsers, getUserById } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore';
 import { Pet, User } from '@/types/database';
 import { calculateDistance } from '@/utils/distance';
@@ -25,18 +21,20 @@ export const useActivePets = ({ maxDistance }: UseActivePetsProps = {}) => {
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
-    const { user } = useUserStore();
+    const { profile } = useUserStore();
    
 
     // Re-fetch when the radius changes or when the user's own geopoint changes
     // (like when a user updates their location from the profile screen)
-    const geoKey = user?.geopoint
-        ? `${user.geopoint.latitude},${user.geopoint.longitude}`
+    const geoKey = profile?.geopoint
+        ? `${profile.geopoint.latitude},${profile.geopoint.longitude}`
         : null;
 
+    const { user } = useUserStore();
+
     useEffect(() => {
-        fetchPets();
-    }, [maxDistance, geoKey]);
+        if (user?.uid) fetchPets();
+    }, [maxDistance, geoKey, user?.uid]);
 
     const fetchPets = async () => {
         try {
@@ -50,8 +48,8 @@ export const useActivePets = ({ maxDistance }: UseActivePetsProps = {}) => {
 
            // Skip distance filtering if no radius set, no geopoint, or geopoint is still
            // the 0,0 placeholder set at signup before the user has added a real location
-           const hasRealLocation = user?.geopoint &&
-               !(user.geopoint.latitude === 0 && user.geopoint.longitude === 0);
+           const hasRealLocation = profile?.geopoint &&
+               !(profile.geopoint.latitude === 0 && profile.geopoint.longitude === 0);
 
            if (!maxDistance || !hasRealLocation) {
                 setPets(fetchedPets);
@@ -71,8 +69,8 @@ export const useActivePets = ({ maxDistance }: UseActivePetsProps = {}) => {
                         }
                         
                         const distance = calculateDistance(
-                            user.geopoint.latitude,
-                            user.geopoint.longitude,
+                            profile.geopoint.latitude,
+                            profile.geopoint.longitude,
                             owner.geopoint.latitude,
                             owner.geopoint.longitude
                         );
