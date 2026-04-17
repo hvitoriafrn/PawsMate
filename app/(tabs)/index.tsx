@@ -2,7 +2,7 @@
 // This is the home screen. Here the user will see partnership banners, sponsored ads, and any other content that might be relevant to them.
 // For now, it simulates partnerships and ads, for demonstration purposes only, showcasing how it would look like in the future.
 
-import { getUserById } from '@/services/firebase/firestoreService';
+import { getUserById } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
