@@ -4,12 +4,9 @@ import BreedAutocomplete from '@/components/breedAutocomplete';
 import { db } from '@/config/firebase';
 import { SCREEN_BG, SCREEN_TITLE } from '@/constants/styles';
 import { useActivePets } from '@/hooks/firestore';
-import {
-    checkAndCreateMatch,
-    createLike,
-    getPetsByOwnerId,
-    getUserById
-} from '@/services/firebase/firestoreService';
+import { checkAndCreateMatch, createLike } from '@/services/firebase/matchService';
+import { getPetsByOwnerId } from '@/services/firebase/petService';
+import { getUserById } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore'; // this gets the current logged in user
 import { LookingFor, Pet, User } from '@/types/database';
 import { Feather } from '@expo/vector-icons';
@@ -104,9 +101,6 @@ export default function ExploreScreen() {
     // for the pet photos carousel
     const [photoIndex, setPhotoIndex] = useState(0);
 
-    // // Pet health info section, is it expanded?
-    // const [showHealthInfo, setShowHealthInfo] = useState<boolean>(false);
-
     // Get the owner of the current pet on display
     const [currentOwner, setCurrentOwner] = useState<User | null>(null);
     const [ownerLoading, setOwnerLoading] = useState<boolean>(false);
@@ -200,13 +194,11 @@ export default function ExploreScreen() {
                 // Check for all the pet ids the user has already liked or passed on
                 // using AsyncStorage first as it's faster
                 const seenIds = await getSeenPetIds(user.uid);
-                // Filter the pets list, keeps only the IDs are not on 'seenIds'
                 setUnseenPets(pets.filter(pet => !seenIds.has(pet.id)));
             } catch (error) {
                 console.error('Error filtering seen pets:', error);
                 setUnseenPets(pets);
             } finally {
-                // Turn off loading
                 setSeenLoading(false);
             }
         };
@@ -218,7 +210,7 @@ export default function ExploreScreen() {
     useEffect(() => {
         if (currentPet) {
             getOwner();
-            setPhotoIndex(0); // reset to first photo when the card changes
+            setPhotoIndex(0); 
         }
     }, [currentPet?.id]);
 
@@ -238,10 +230,7 @@ export default function ExploreScreen() {
         }
     };
 
-
     // Photo navigation, taping the left photo goes back and right goes forward
-    // The other photos are 'locked' until a match happens
-    const FREE_PHOTOS = 3;
     const handlePhotoTap = (side: 'left' | 'right') => {
         if (side === 'left') {
             setPhotoIndex(prev => Math.max(0, prev - 1));
@@ -294,7 +283,6 @@ export default function ExploreScreen() {
     // Handle the like functionality
     const handleLike = async() => {
         if (!currentPet || !user ) return;
-        
 
         // Keep users from liking other pets unless they have an active pet
         if (!userPetId) {
@@ -309,8 +297,8 @@ export default function ExploreScreen() {
         }
         // update local AsyncStorage to mark the pet as seen
         await markPetAsSeen(user.uid, currentPet.id);
+        
         try {
-            // save the action to Firestore
              await createLike(
                 user.uid,
                 currentPet.id,
@@ -343,15 +331,12 @@ export default function ExploreScreen() {
     // User taps on 'send message' on the modal and it takes them to chat screet
     const handleGoToChat = () => {
         setShowMatchModal(false);
-        // skip to next pet!
         setCurrentIndex(prev => prev + 1);
-        // Log everything so we can see what values we have
         console.log('handleGoToChat called');
         console.log('newMatchId:', newMatchId);
         console.log('currentPet:', currentPet?.id);
 
         if (newMatchId && currentPet) {
-            // navigate to chat screen
             router.push({
                 pathname: '/(tabs)/messages/[matchId]',
                 params: {
@@ -363,7 +348,6 @@ export default function ExploreScreen() {
         }
     };
 
-    // User chooses to 'keep exploring' instead
     const handleDismissMatch = () => {
         setShowMatchModal(false);
         advanceCard();
@@ -455,16 +439,6 @@ export default function ExploreScreen() {
                                         resizeMode= "cover"
                                         />
 
-                                        {/* Blur for the locked photos */}
-                                        {photoIndex >= FREE_PHOTOS && (
-                                            <View style={styles.lockedOverlay}>
-                                                <Feather name="lock" size={32} color="#fff" />
-                                                <Text style={styles.lockedText}>Match to unlock</Text>
-                                                <Text style={styles.lockedSubtext}>
-                                                    Match with this user to see all photos
-                                                </Text>
-                                            </View>
-                                        )}
 
                                         {/* Tap zones (left goes back, right goes forward) */}
                                         <View style={styles.tapZones}>
@@ -502,8 +476,6 @@ export default function ExploreScreen() {
                                                         style={[
                                                             styles.dot,
                                                             i === photoIndex && styles.dotActive,
-                                                            // Locked photos show the lock dot
-                                                            i >= FREE_PHOTOS && styles.dotLocked,
                                                         ]}
                                                     />
                                                 ))}
@@ -625,7 +597,8 @@ export default function ExploreScreen() {
                         </Text>
                         <Text style={styles.emptyStateText}>
                             {displayPets.length === 0 && unseenPets.length === 0
-                                ? `No pets found within ${activeRadius} km. Try increasing the search radius in filters.`
+                                ? `No pets found within ${activeRadius} km. 
+                                Try increasing the search radius in filters.`
                                 : 'Check back soon for new profiles!'}
                         </Text>
                         {/* Button to check if new pets were added */}
@@ -710,7 +683,9 @@ export default function ExploreScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+                <ScrollView 
+                showsVerticalScrollIndicator={false} 
+                contentContainerStyle={{ paddingBottom: 24 }}>
 
                     {/* Radius */}
                     <Text style={styles.filterSectionLabel}>Search radius</Text>
@@ -861,29 +836,6 @@ const styles = StyleSheet.create ({
         flex: 1 
     },
 
-    // Locked photo overlay
-    lockedOverlay: {
-        position: 'absolute',
-        top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-    },
-
-    lockedText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: '700',
-    },
-
-    lockedSubtext: {
-        color: 'rgba(255,255,255,0.8)',
-        fontSize: 13,
-        textAlign: 'center',
-        paddingHorizontal: 32,
-    },
-
     // Verified badge
     verifiedBadge: {
         position: 'absolute',
@@ -944,10 +896,6 @@ const styles = StyleSheet.create ({
         backgroundColor: '#fff',
         width: 18,
     },
-    dotLocked: {
-        backgroundColor: 'rgba(255,255,255,0.3)',
-    },
-
     petInfoOverlay: {
         position: 'absolute',
         bottom: 0,
