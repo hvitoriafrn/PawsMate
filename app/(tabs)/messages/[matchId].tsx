@@ -1,11 +1,8 @@
 // The chat screen between the two matched users 
 
 // import all the necessary modules and libraries
-import {
-    getUserById,
-    sendMessage,
-    subscribeToMessages
-} from '@/services/firebase/firestoreService';
+import { sendMessage, subscribeToMessages } from '@/services/firebase/messageService';
+import { getUserById } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore';
 import { Message, User } from '@/types/database';
 import { Feather } from '@expo/vector-icons';
