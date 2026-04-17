@@ -2,11 +2,9 @@
 // This is where all the matched conversations will be displayed 
 
 import { SCREEN_BG, SCREEN_TITLE } from '@/constants/styles';
-import {
-    getMatchesForUser,
-    getPetsByOwnerId,
-    getUserById
-} from '@/services/firebase/firestoreService';
+import { getMatchesForUser } from '@/services/firebase/matchService';
+import { getPetsByOwnerId } from '@/services/firebase/petService';
+import { getUserById } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore';
 import { Match, Pet, User } from '@/types/database';
 import { Feather } from '@expo/vector-icons';
