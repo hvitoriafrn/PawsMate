@@ -2,7 +2,7 @@
 
 import BreedAutocomplete from '@/components/breedAutocomplete';
 import { auth } from '@/config/firebase';
-import { createPet, updatePet } from '@/services/firebase/firestoreService';
+import { createPet, updatePet } from '@/services/firebase/petService';
 import { pickImage, uploadImageToStorage } from '@/utils/imageUpload';
 import React, { useEffect, useState } from 'react';
 import {
