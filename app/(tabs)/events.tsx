@@ -1,7 +1,7 @@
 // Events screen, where users can browse and join nearby events
 
 import { SCREEN_BG, SCREEN_TITLE } from '@/constants/styles';
-import { getEvents, joinEvent, leaveEvent } from '@/services/firebase/firestoreService';
+import { getEvents, joinEvent, leaveEvent } from '@/services/firebase/eventService';
 import { useUserStore } from '@/store/userStore';
 import { Event, EventType } from '@/types/database';
 import { calculateDistance } from '@/utils/distance';
@@ -49,7 +49,7 @@ const formatTime = (date: Date): string =>
     date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 export default function EventsScreen() {
-    const { user } = useUserStore();
+    const { user, profile } = useUserStore();
 
     const [allEvents, setAllEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState(true);
@@ -83,8 +83,8 @@ export default function EventsScreen() {
         }
     };
 
-    const hasRealLocation = user?.geopoint &&
-        !(user.geopoint.latitude === 0 && user.geopoint.longitude === 0);
+    const hasRealLocation = profile?.geopoint &&
+        !(profile.geopoint.latitude === 0 && profile.geopoint.longitude === 0);
 
     // My events, show just the ones the user has joined
     const myEvents = allEvents.filter(e => user?.uid && e.attendees.includes(user.uid));
@@ -93,8 +93,8 @@ export default function EventsScreen() {
     const discoverEvents = allEvents.filter(event => {
         if (hasRealLocation) {
             const dist = calculateDistance(
-                user!.geopoint.latitude,
-                user!.geopoint.longitude,
+                profile!.geopoint.latitude,
+                profile!.geopoint.longitude,
                 event.geopoint.latitude,
                 event.geopoint.longitude
             );
@@ -185,8 +185,8 @@ export default function EventsScreen() {
         let distanceLabel: string | null = null;
         if (hasRealLocation) {
             const dist = calculateDistance(
-                user!.geopoint.latitude,
-                user!.geopoint.longitude,
+                profile!.geopoint.latitude,
+                profile!.geopoint.longitude,
                 event.geopoint.latitude,
                 event.geopoint.longitude
             );
