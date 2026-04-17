@@ -1,15 +1,11 @@
 // Profile screen, where users can view and edit their information and manage their pets
 
+import { PetCard } from '@/components/PetCard';
 import PetFormModal, { PetData } from '@/components/petFormModal';
 import { auth } from '@/config/firebase';
 import { useUser, useUserPets } from '@/hooks/firestore';
-import {
-    deletePet,
-    getUserById,
-    updatePetsOwnerGeopoint,
-    updateUserLocation,
-    updateUserProfile,
-} from '@/services/firebase/firestoreService';
+import { deletePet, updatePetsOwnerGeopoint } from '@/services/firebase/petService';
+import { getUserById, updateUserLocation, updateUserProfile } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore';
 import { geocodeAddress, reverseGeocode } from '@/utils/geocoding';
 import { pickImage, uploadImageToStorage } from '@/utils/imageUpload';
@@ -37,7 +33,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function ProfileScreen() {
 
     // get the logged in user
-    const { user: authUser, setUser } = useUserStore();
+    const { user: authUser, setProfile } = useUserStore();
     // Get the user data from firestore using the user id
     const { user, loading: userLoading, refetch: refetchUser} = useUser(authUser?.uid || null);
     // Get all pets owned by this user
@@ -163,7 +159,7 @@ export default function ProfileScreen() {
 
                 // Sync updated geopoint into the Zustand store so explore re-filters immediately
                 const refreshed = await getUserById(authUser.uid);
-                if (refreshed) setUser(refreshed);
+                if (refreshed) setProfile(refreshed);
             }
 
             await refetchUser();
@@ -211,7 +207,7 @@ export default function ProfileScreen() {
             spayedNeutered: pet.healthInfo?.spayedNeutered || false,
             healthNotes: pet.healthInfo?.healthNotes || '',
             microchipNumber: pet.verification?.microchipNumber || '',
-            photo: pet.photos || pet.photos?.[0] || '',
+            photo: pet.photo || pet.photos?.[0] || '',
             photos: pet.photos || (pet.photo ? [pet.photo] : []),
     });
     setPetModalVisible(true);
@@ -566,14 +562,14 @@ export default function ProfileScreen() {
                                             await updateUserLocation(authUser.uid, latitude, longitude, displayName);
                                             await updatePetsOwnerGeopoint(authUser.uid, latitude, longitude);
                                             const refreshed = await getUserById(authUser.uid);
-                                            if (refreshed) setUser(refreshed);
+                                            if (refreshed) setProfile(refreshed);
                                             setLocationEnabled(true);
                                         } else {
                                             // Reset geopoint to {0,0} treated as "no location" everywhere
                                             await updateUserLocation(authUser.uid, 0, 0, '');
                                             await updatePetsOwnerGeopoint(authUser.uid, 0, 0);
                                             const refreshed = await getUserById(authUser.uid);
-                                            if (refreshed) setUser(refreshed);
+                                            if (refreshed) setProfile(refreshed);
                                             setLocationEnabled(false);
                                         }
                                     } catch (error) {
@@ -627,87 +623,6 @@ export default function ProfileScreen() {
         </SafeAreaView>
     );
 }
-        // Render one pet row in the 'My pets list'
-        interface PetCardProps{
-            pet: any;
-            onEdit:() => void;
-            onDelete: () => void;
-        }
-
-            function PetCard({ pet, onEdit, onDelete }: PetCardProps) {
-                return (
-                    <View style={cardStyles.container}>
-
-                        {/* Pet photo, first from the array to show */}
-                        {pet.photos?.[0] || pet.photo ? (
-                            <Image 
-                                source= {{ uri: pet.photos?.[0] || pet.photo }}
-                                style={cardStyles.thumb}
-                            />
-                        ) : (
-                            <View style={[cardStyles.thumb, cardStyles.thumbPlaceholder]}>
-                                <Text style={{ fontSize: 28 }}>🐶 </Text>
-                            </View>
-                        )}
-
-                        <View style= {{ flex: 1 }}>
-                            {/* Name row that includes edit and delete icons */}
-                            <View style={cardStyles.nameRow}>
-                                <Text style={cardStyles.name}>{pet.name}</Text>
-                                <View style= {{ flexDirection: 'row', gap:4 }}>
-                                    <TouchableOpacity 
-                                        onPress={onEdit}
-                                        style={{ padding: 4}}
-                                    >
-                                        <Feather name="edit-2" size={14} color="#00c489" />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity 
-                                        onPress={onDelete}
-                                        style= {{ padding: 4 }}>
-                                           <Feather name="trash-2" size={14} color="#ef4444" />
-                                        </TouchableOpacity>
-                                </View>
-                            </View>
-
-                            {/* Breed, age and gender */}
-                            <Text style={cardStyles.meta}>
-                                {pet.breed} · {pet.age} {pet.age !== 1 ? 'years' : 'year'} · {pet.gender}
-                            </Text>
-                            <Text style={cardStyles.meta}>Size: {pet.size}</Text>
-                            
-
-                            {/* Personality tags, the chips, shown max of 3 */}
-                            {(pet.personalityTraits?.length >0 || pet.tags?.length >0) && (
-                                <View style={cardStyles.chipRow}>
-                                    {(pet.personalityTraits || pet.tags || []).slice(0, 3).map((tag: string) => (
-                                        <View key={tag} style={cardStyles.tagChip}>
-                                            <Text style={cardStyles.tagText}> {tag} </Text>
-                                        </View>
-                                    ))}
-                                    {/* Show the count of how many extra tags like "+2 more" */}
-                                    {(pet.personalityTraits || pet.tags || []).length > 3 && (
-                                        <Text style={cardStyles.overflow}>
-                                            +{(pet.personalityTraits || pet.tags || []).length - 3}
-                                        </Text>
-                                    )}
-                                </View>
-                            )}
-
-                            {/* Looking for tags, max of 2 shown */}
-                            {pet.lookingFor?.length > 0 && (
-                                <View style={cardStyles.chipRow}>
-                                    {pet.lookingFor.slice(0,2).map((lf: string) => (
-                                        <View key= {lf} style={cardStyles.lfChip}>
-                                            <Text style={cardStyles.lfText}>{lf}</Text>
-                                        </View>
-                                    ))}
-                                </View>
-                            )}
-                        </View>
-                    </View>
-                );
-            }
-
  // Styles
 const styles = StyleSheet.create({
 
@@ -1029,82 +944,5 @@ const styles = StyleSheet.create({
         color: '#e05555',
         fontWeight: '600',
         fontSize: 15,
-    },
-});
-
-// Styles for the pet card, separate since it's a different component
-const cardStyles = StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        gap: 12,
-        padding: 12,
-        marginBottom: 8,
-        backgroundColor: '#ffffff',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-    },
-    thumb: {
-        width: 62,
-        height: 62,
-        borderRadius: 30,
-        alignSelf: 'center',
-    },
-    thumbPlaceholder: {
-        backgroundColor: '#f0f0f0',
-        alignItems: 'center',
-        justifyContent: 'center',
-        alignSelf: 'center',
-    },
-    nameRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 2,
-    },
-    name: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#111',
-    },
-    meta: {
-        fontSize: 13,
-        color: '#666',
-        marginBottom: 1,
-    },
-    chipRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 4,
-        marginTop: 5,
-    },
-    tagChip: {
-        backgroundColor: '#e0f5f5',
-        paddingVertical: 3,
-        paddingHorizontal: 8,
-        borderRadius: 10,
-    },
-    tagText: {
-        fontSize: 11,
-        color: '#20B2AA',
-        fontWeight: '600',
-    },
-    lfChip: {
-        backgroundColor: '#fff3e0',
-        paddingVertical: 3,
-        paddingHorizontal: 8,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: '#F5A623',
-    },
-    lfText: {
-        fontSize: 11,
-        color: '#F5A623',
-        fontWeight: '600',
-    },
-    overflow: {
-        fontSize: 11,
-        color: '#aaa',
-        alignSelf: 'center',
     },
 });
