@@ -55,7 +55,7 @@ export const reverseGeocode = async (
 
         const { address } = data;
 
-        // Build short, readable string from the most useful parts
+        // Build short readable string from the most useful parts
         const suburb = address.suburb || address.neighbourhood || address.quarter;
         const city = address.city || address.town || address.village || address.county;
 
