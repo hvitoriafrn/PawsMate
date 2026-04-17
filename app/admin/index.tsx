@@ -1,14 +1,8 @@
 // Admin panel for event management + microchip verification queue
 
 import { SCREEN_BG, SCREEN_TITLE } from '@/constants/styles';
-import {
-    createEvent,
-    deleteEvent,
-    getEvents,
-    getPendingVerificationPets,
-    updateEvent,
-    updatePetVerification,
-} from '@/services/firebase/firestoreService';
+import { createEvent, deleteEvent, getEvents, updateEvent } from '@/services/firebase/eventService';
+import { getPendingVerificationPets, updatePetVerification } from '@/services/firebase/petService';
 import { useUserStore } from '@/store/userStore';
 import { Event, EventType, Pet, PetType } from '@/types/database';
 import { geocodeAddress } from '@/utils/geocoding';
@@ -64,10 +58,10 @@ type EventFormState = ReturnType<typeof emptyEventForm>;
 // Component 
 
 export default function AdminScreen() {
-    const { user } = useUserStore();
+    const { user, profile } = useUserStore();
 
     // Block non-admins
-    if (!user?.isAdmin) {
+    if (!profile?.isAdmin) {
         return (
             <SafeAreaView style={[styles.container, styles.centred]}>
                 <Feather name="lock" size={40} color="#9ca3af" />
