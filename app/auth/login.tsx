@@ -1,6 +1,5 @@
 // login screen
 import { auth } from '@/config/firebase';
-import { getUserById } from '@/services/firebase/firestoreService';
 import { useUserStore } from '@/store/userStore';
 import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
@@ -44,8 +43,7 @@ export default function LoginScreen() {
 
       // Store the full Firestore user (which includes geopoint) rather than
       // the Firebase Auth object, so distance filtering works immediately
-      const firestoreUser = await getUserById(userCredential.user.uid);
-      setUser(firestoreUser ?? userCredential.user);
+      setUser(userCredential.user);
 
       router.replace('/(tabs)');
 
