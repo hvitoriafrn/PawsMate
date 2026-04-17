@@ -1,5 +1,6 @@
 // import the necessary modules and components
 import { auth } from '@/config/firebase';
+import { getUserById } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
@@ -53,14 +54,20 @@ export default function RootLayout() {
 // This is the actual navigation layout structure
 function RootLayoutNav() {
   const colorScheme = useColorScheme(); // checks the device's color scheme (dark or light mode enabled)
-  const { setUser } = useUserStore(); // get the setUser function from the user store
+  const { setUser, setProfile } = useUserStore();
   const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // Listen to authentication state changes and saves it to the store so the app knows the login state
+  // Listen to authentication state changes, single source of truth for both
+  // the Firebase Auth user and the Firestore profile (covers login, signup, app restart)
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log('Auth state changed:', user ? 'Logged in' : 'Logged out');
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        const firestoreDoc = await getUserById(firebaseUser.uid);
+        setProfile(firestoreDoc ?? null);
+      } else {
+        setProfile(null);
+      }
       setIsAuthReady(true);
     });
 
