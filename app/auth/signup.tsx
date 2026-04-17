@@ -1,6 +1,6 @@
 // signup
 import { auth } from '@/config/firebase';
-import { createUserDocument, getUserById } from '@/services/firebase/firestoreService';
+import { createUserDocument } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore';
 import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -117,11 +117,10 @@ export default function SignUpScreen() {
       console.log('Firestore doc created');
 
       // Store the full Firestore user so geopoint is available from the start
-      const firestoreUser = await getUserById(user.uid);
-      setUser(firestoreUser ?? { uid: user.uid, email: user.email || '', displayName: name });
+      setUser(user);
 
       Alert.alert('Success', 'Account created successfully!');
-      router.replace('/onboarding/location');
+      router.replace('/auth/location' as any);
 
     } catch (error: any) {
       console.error('Signup error:', error);
