@@ -1,11 +1,11 @@
+import { User as FirestoreUser } from '@/types/database';
 import { User as FirebaseUser } from 'firebase/auth';
 import { create } from 'zustand';
-import { User as FirestoreUser } from '@/types/database';
 
 interface UserStore {
-  // Firebase Auth user — available immediately after login, used for uid/auth state
+  // Firebase Auth user available immediately after login, used for uid/auth state
   user: FirebaseUser | null;
-  // Firestore user document — loaded after auth, contains geopoint, isAdmin, etc.
+  // Firestore user document loaded after auth, contains geopoint, isAdmin, etc.
   profile: FirestoreUser | null;
   isLoading: boolean;
   error: string | null;
