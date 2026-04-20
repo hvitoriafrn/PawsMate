@@ -332,8 +332,8 @@ const styles = StyleSheet.create({
         lineHeight: 21 
     },
 
-    myText: { 
-        color: 'white' 
+    myText: {
+        color: '#111'
     },
 
     theirText: { 
