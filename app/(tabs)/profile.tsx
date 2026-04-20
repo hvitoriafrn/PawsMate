@@ -480,7 +480,7 @@ export default function ProfileScreen() {
                                     setIsEditing(true);
                                 }}
                             >
-                                <Feather name="edit-2" size={14} color="#00c489" />
+                                <Feather name="edit-2" size={14} color="#111" />
                             </TouchableOpacity>
                         </View>
                         
