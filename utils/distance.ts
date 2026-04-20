@@ -36,7 +36,7 @@ const toRad = (degrees: number): number => {
 };
 
 
- // Shows miles if distance > 1km, otherwise meters
+ // Shows km if distance > 1km, otherwise meters
 
 export const formatDistance = (distanceKm: number): string => {
   if (distanceKm < 1) {
