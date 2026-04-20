@@ -35,7 +35,7 @@ export function PetCard({ pet, onEdit, onDelete }: PetCardProps) {
                             onPress={onEdit}
                             style={{ padding: 4}}
                         >
-                            <Feather name="edit-2" size={14} color="#00c489" />
+                            <Feather name="edit-2" size={14} color="#111" />
                         </TouchableOpacity>
                         <TouchableOpacity
                             onPress={onDelete}
