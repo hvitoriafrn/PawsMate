@@ -1,6 +1,5 @@
-// import the necessary modules and components
 import { auth } from '@/config/firebase';
-import { getUserById } from '@/services/firebase/userService';
+import { createUserDocument, getUserById } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
@@ -24,36 +23,30 @@ export {
 // Prevent the splash screen from auto-hiding before asset loading is complete
 SplashScreen.preventAutoHideAsync();
 
-// Main layout component with font loading and splash screen handling
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     ...FontAwesome.font,
   });
 
-  // If the font loading fails, throw the error
   useEffect(() => {
     if (error) throw error;
   }, [error]);
 
-  // Hide the splash screen once fonts are loaded
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
 
-  // If fonts are not loaded yet, render nothing
   if (!loaded) {
     return null;
   }
- 
-  // Render the main navigation layout
+
   return <RootLayoutNav />;
 }
 
-// This is the actual navigation layout structure
 function RootLayoutNav() {
-  const colorScheme = useColorScheme(); // checks the device's color scheme (dark or light mode enabled)
+  const colorScheme = useColorScheme();
   const { setUser, setProfile } = useUserStore();
   const [isAuthReady, setIsAuthReady] = useState(false);
 
@@ -63,7 +56,27 @@ function RootLayoutNav() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        const firestoreDoc = await getUserById(firebaseUser.uid);
+        let firestoreDoc = await getUserById(firebaseUser.uid);
+
+        // Auth account exists but Firestore document is missing: the signup Firestore
+        // write failed partway through (network drop, permissions blip, Android backgrounding).
+        // Create a stub document so the user isn't stuck in a broken "No user data found" state.
+        if (!firestoreDoc) {
+          console.warn('No Firestore doc for authenticated user, creating stub document');
+          try {
+            await createUserDocument(
+              firebaseUser.uid,
+              firebaseUser.email ?? '',
+              firebaseUser.displayName ?? 'User',
+              0,
+              '',
+            );
+            firestoreDoc = await getUserById(firebaseUser.uid);
+          } catch (err) {
+            console.error('Failed to create stub user document:', err);
+          }
+        }
+
         setProfile(firestoreDoc ?? null);
       } else {
         setProfile(null);
@@ -71,16 +84,13 @@ function RootLayoutNav() {
       setIsAuthReady(true);
     });
 
-    // Cleanup the listener on unmount, helps prevent memory leaks
     return unsubscribe;
   }, []);
 
-  //  Don't render anything until auth state is determined
   if (!isAuthReady) {
-    return null;  
+    return null;
   }
 
-  // applies the appropriate theme based on the device's color scheme
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
        <Stack screenOptions={{ headerShown: false }}>
