@@ -32,27 +32,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
 
-    // get the logged in user
     const { user: authUser, setProfile } = useUserStore();
-    // Get the user data from firestore using the user id
     const { user, loading: userLoading, refetch: refetchUser} = useUser(authUser?.uid || null);
-    // Get all pets owned by this user
     const { pets, loading: petsLoading, refetch: refetchPets } = useUserPets(authUser?.uid || null);
    
-    // State to control the 'edit profile' modal
     const [isEditing, setIsEditing] = useState(false);
-    // State to store form data when editing
     const [editedName, setEditedName] = useState('');
     const [editedBio, setEditedBio] = useState('');
     const [editedLocation, setEditedLocation] = useState('');
     const [locationError, setLocationError] = useState('');
-    // Check for profile and pet are being saved
     const [savingProfile, setSavingProfile] = useState(false);
-  
-    // Controls the avatar upload spinner
+
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-    // Banner upload!
     const [bannerUri, setBannerUri] = useState<string | null>(null);
     const [uploadingBanner, setUploadingBanner] = useState(false);
 
@@ -62,10 +54,8 @@ export default function ProfileScreen() {
     const [locationEnabled, setLocationEnabled] = useState(hasRealLocation);
     const [locationUpdating, setLocationUpdating] = useState(false);
 
-    // Pull to refresh
     const [refreshing, setRefreshing] = useState(false);
 
-    // Controls the petFormModal, which handles add and edit pet modal
     const [petModalVisible, setPetModalVisible] = useState(false);
     const [editingPet, setEditingPet] = useState<PetData | undefined>(undefined);
 
@@ -85,14 +75,10 @@ export default function ProfileScreen() {
             const localUri = await pickImage();
             if (!localUri) return;
 
-            // This will overwrite the old avatar
             const path = `users/${authUser.uid}/avatar.jpg`;
             const url = await uploadImageToStorage(localUri, path);
 
-            // Save the URL to firestore
             await updateUserProfile(authUser.uid, { profilePicture: url });
-
-            // Refresh so it shows immediately
             await refetchUser();
         } catch (error) {
             Alert.alert('Error', 'Could not update photo. Please try again.');
@@ -112,10 +98,7 @@ export default function ProfileScreen() {
             const path = `users/${authUser.uid}/banner.jpg`;
             const url = await uploadImageToStorage(localUri, path);
 
-            // Save the banner URL to firestore
              await updateUserProfile(authUser.uid, { bannerPicture: url });
-
-             // Update the local state 
              setBannerUri(url)
         } catch (error) {
             Alert.alert('Error', 'Could not update banner. Please try again');
@@ -173,7 +156,6 @@ export default function ProfileScreen() {
 
     // Cancel edit, discard changes
     const handleCancelEdit = () =>  {
-        // Restore the inputs to the last saved values
         if (user) {
             setEditedName(user.name);
             setEditedBio(user.bio);
@@ -191,7 +173,7 @@ export default function ProfileScreen() {
         setPetModalVisible(true);
     };
 
-    // open the modal in Edit Pet, prefilled with the existingpoi.k, pet's data
+    // Open petFormModal in Edit Pet mode, prefilled with the existing pet's data
     const handleEditPet = (pet: any) => {
             setEditingPet({
             id: pet.id,
@@ -294,9 +276,8 @@ export default function ProfileScreen() {
     }
 
 
-    // Render user profile card section
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f0f0' }}>  
+        <SafeAreaView style={styles.safeArea}>
             <ScrollView 
                 style={styles.screen}
                 showsVerticalScrollIndicator={false}
@@ -308,7 +289,6 @@ export default function ProfileScreen() {
                 {/* Banner and avatar */}
                 <View style={styles.bannerContainer}>
 
-                    {/* Tapping the avatar will open the photo picker */}
                     <TouchableOpacity
                         onPress={handleChangeBanner}
                         disabled={!isEditing}
@@ -316,20 +296,17 @@ export default function ProfileScreen() {
                         style={{ width: '100%' }}
                     >
                         {uploadingBanner ? (
-                            // a spinner overlay while it loads
                             <View style={[styles.banner, styles.bannerLoading]}>
                                 <ActivityIndicator color="#fff" size="large"/>
                                 <Text style={styles.bannerLoadingText}>Updating banner...</Text>
                             </View>
-                        ) : bannerUri || user.bannerPicture ? ( 
-                            //Show the uploaded banner
-                            <Image 
+                        ) : bannerUri || user.bannerPicture ? (
+                            <Image
                                 source={{ uri: bannerUri || user.bannerPicture }}
                                 style={styles.bannerImage}
                                 resizeMode="cover"
                             />
                         ) : (
-                            //Default banner 
                             <View style={styles.banner}>
                                 { isEditing && (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -349,7 +326,6 @@ export default function ProfileScreen() {
                         disabled={!isEditing}
                     >
                         {uploadingAvatar ? (
-                            // A spinner shown while uploading
                             <View style={[styles.avatar, styles.avatarLoading]}>
                                 <ActivityIndicator color="#F2B949"/>
                             </View>
@@ -359,7 +335,6 @@ export default function ProfileScreen() {
                                 style={styles.avatar}
                             />
                         ) : (
-                            // show the first letter of the user's name as fall back
                             <View style={[styles.avatar, styles.avatarFallback]}>
                                 <Text style={styles.avatarInitial}>
                                     {user.name.charAt(0).toUpperCase() || '?'}
@@ -511,7 +486,7 @@ export default function ProfileScreen() {
 
                     {petsLoading ? (
                         <ActivityIndicator
-                            color="#20B2AA"
+                            color="#F2B949"
                             style={{ marginVertical: 20}}
                         />
                     ) : pets.length === 0 ? (
@@ -626,6 +601,11 @@ export default function ProfileScreen() {
  // Styles
 const styles = StyleSheet.create({
 
+    safeArea: {
+        flex: 1,
+        backgroundColor: '#f0f0f0',
+    },
+
     screen: {
         flex: 1,
         backgroundColor: '#f0f0f0',
@@ -636,7 +616,7 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#fafaf0',
+        backgroundColor: '#f0f0f0',
     },
     loadingText: {
         marginTop: 12,
@@ -787,7 +767,7 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
 
-    // Profile edit move
+    // Profile edit mode
      fieldRow: {
         flexDirection: 'row',
     },
