@@ -7,7 +7,7 @@ import { useActivePets } from '@/hooks/firestore';
 import { checkAndCreateMatch, createLike } from '@/services/firebase/matchService';
 import { getPetsByOwnerId } from '@/services/firebase/petService';
 import { getUserById } from '@/services/firebase/userService';
-import { useUserStore } from '@/store/userStore'; // this gets the current logged in user
+import { useUserStore } from '@/store/userStore';
 import { LookingFor, Pet, User } from '@/types/database';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,7 +18,7 @@ import {
     query,
     where
 } from 'firebase/firestore';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -89,31 +89,24 @@ const markPetAsSeen = async (userId: string, petId: string): Promise<void> => {
     }
 };
 
-// Component for the Explore screen
 export default function ExploreScreen() {
 
-    // The pet card currently on display
     const [currentIndex, setCurrentIndex] = useState<number>(0);
-    // Track which pets have already been seen
     const [unseenPets, setUnseenPets] = useState<Pet[]>([]);
     const [seenLoading, setSeenLoading] = useState(true);
 
     // for the pet photos carousel
     const [photoIndex, setPhotoIndex] = useState(0);
 
-    // Get the owner of the current pet on display
     const [currentOwner, setCurrentOwner] = useState<User | null>(null);
     const [ownerLoading, setOwnerLoading] = useState<boolean>(false);
 
-    //Get the ID of the logged in user's pet
     const [userPetId, setUserPetId] = useState<string | null>(null);
 
-    // Control the modal for 'its a match' popup
     const [showMatchModal, setShowMatchModal] = useState<boolean>(false);
-    // Stores the newly created Match
     const [newMatchId, setNewMatchId] = useState<string | null>(null);
 
-    // Filter state, draft is what the user is editing in the sheet
+    // Filter state: draft is what the user is editing in the sheet,
     // active is what's currently applied to the card stack
     const [showFilters, setShowFilters] = useState(false);
     const [draftRadius, setDraftRadius] = useState(10);
@@ -123,11 +116,9 @@ export default function ExploreScreen() {
     const [activeLookingFor, setActiveLookingFor] = useState<LookingFor[]>([]);
     const [activeBreed, setActiveBreed] = useState('');
 
-    // Get all the active pets from Firestore, the radius is driven by active filter
     const { pets: allPets, loading, error, refetch } = useActivePets({
         maxDistance: activeRadius,
     });
-    // Get the current logged in users from Zustand
     const { user } = useUserStore();
 
     // Strip out the user's own pets, then apply lookingFor / breed filters client-side
@@ -139,10 +130,8 @@ export default function ExploreScreen() {
         return true;
     });
 
-    // the pet currently being showed
     const currentPet = displayPets[currentIndex];
 
-    // Build the photos array for the pet
     const currentPhotos = currentPet
     ? (currentPet.photos && currentPet.photos.length > 0
         ? currentPet.photos
@@ -155,10 +144,14 @@ export default function ExploreScreen() {
         activeLookingFor.length +
         (activeBreed.trim() ? 1 : 0);
 
-    // Load the user's first pet ID, needed for the like
+    // Keep a ref to the latest refetch so useFocusEffect never captures a stale closure
+    const refetchRef = useRef(refetch);
+    useEffect(() => { refetchRef.current = refetch; });
+
     useFocusEffect(
         useCallback(() => {
             if (user?.uid) {
+                refetchRef.current();
                 loadUserPet();
             }
         }, [user?.uid])
@@ -184,6 +177,7 @@ export default function ExploreScreen() {
         // Still run when pets is empty so seenLoading gets cleared
         if (pets.length === 0) {
             setUnseenPets([]);
+            setCurrentIndex(0);
             setSeenLoading(false);
             return;
         }
@@ -194,32 +188,34 @@ export default function ExploreScreen() {
                 // Check for all the pet ids the user has already liked or passed on
                 // using AsyncStorage first as it's faster
                 const seenIds = await getSeenPetIds(user.uid);
-                setUnseenPets(pets.filter(pet => !seenIds.has(pet.id)));
+                const unseen = pets.filter(pet => !seenIds.has(pet.id));
+                setUnseenPets(unseen);
+                // If currentIndex is past the end of the new list (e.g. after a
+                // location change shrinks the result set), reset to the beginning
+                setCurrentIndex(prev => (prev >= unseen.length ? 0 : prev));
             } catch (error) {
                 console.error('Error filtering seen pets:', error);
                 setUnseenPets(pets);
+                setCurrentIndex(0);
             } finally {
                 setSeenLoading(false);
             }
         };
 
-        filterSeenPets(); 
+        filterSeenPets();
     }, [user?.uid, pets.length, loading]);
 
-    // Function for when pet changes, the owner is fetched for that pet (changing it too)
     useEffect(() => {
         if (currentPet) {
             getOwner();
-            setPhotoIndex(0); 
+            setPhotoIndex(0);
         }
     }, [currentPet?.id]);
 
-    // Get owner of the current pet when pet changes
     const getOwner = async () => {
         if (!currentPet) return;
         try {
             setOwnerLoading(true);
-            // Get user from Firestore
             const owner = await getUserById(currentPet.ownerId);
             setCurrentOwner(owner);
         } catch (error) {
@@ -245,7 +241,6 @@ export default function ExploreScreen() {
         setPhotoIndex(0);
     };
 
-    // Handle the pass option (save the pass to database and move to next pet)
     const handlePass = async () => {
         if (!currentPet || !user) return;
 
@@ -261,10 +256,8 @@ export default function ExploreScreen() {
             return;
         }
 
-        // update local AsyncStorage to mark the pet as seen
         await markPetAsSeen(user.uid, currentPet.id);
         try {
-            // Save the action 
             await createLike(
                 user.uid,
                 currentPet.id,
@@ -295,9 +288,8 @@ export default function ExploreScreen() {
             );
             return;
         }
-        // update local AsyncStorage to mark the pet as seen
         await markPetAsSeen(user.uid, currentPet.id);
-        
+
         try {
              await createLike(
                 user.uid,
@@ -328,7 +320,6 @@ export default function ExploreScreen() {
         advanceCard();
     };
 
-    // User taps on 'send message' on the modal and it takes them to chat screet
     const handleGoToChat = () => {
         setShowMatchModal(false);
         setCurrentIndex(prev => prev + 1);
@@ -387,7 +378,6 @@ export default function ExploreScreen() {
         setDraftBreed('');
     };
 
-    // render
     return (
         <SafeAreaView style={styles.safeArea}>
             {/* Header */}
