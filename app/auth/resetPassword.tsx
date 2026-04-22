@@ -72,7 +72,7 @@ export default function ResetPasswordScreen() {
                     /* Success state */
                     <View style={styles.successWrap}>
                         <View style={styles.successIconWrap}>
-                            <Feather name="mail" size={32} color="#F2B949" />
+                            <Feather name="mail" size={32} color="#111" />
                         </View>
                         <Text style={styles.title}>Check your inbox</Text>
                         <Text style={styles.subtitle}>
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
         width: 72,
         height: 72,
         borderRadius: 36,
-        backgroundColor: '#FEF3C7',
+        backgroundColor: '#F2B949',
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 8,
