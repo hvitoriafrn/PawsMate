@@ -1,6 +1,4 @@
-//components/breedAutocomplete.tsx
-
-//A text input that will have a dropdown of brees suggestions for easier profile completion
+// Autocomplete input with a filtered breed suggestions dropdown
 
 import { dogBreeds } from '@/constants/dogBreeds';
 import React, { useState } from "react";
@@ -13,7 +11,6 @@ import {
     View,
 } from 'react-native';
 
-// Props
 interface BreedAutocompleteProps {
     value: string;
     onChangeText: (text: string) => void;
@@ -22,24 +19,19 @@ interface BreedAutocompleteProps {
     dropdownAbove?: boolean;
 }
 
-// Component
 const BreedAutocomplete: React.FC<BreedAutocompleteProps> = ({
     value, onChangeText, dropdownAbove = false }) => {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [suggestions, setSuggestions] = useState<string[]>([]);
 
-    // user types an input
     const handleChangeText = (text: string) => {
         onChangeText(text);
 
         if (text.length >= 2) {
-            // filter the list so it shows only the ones that contain the typed text
             const filtered = dogBreeds.filter((breed) =>
                 breed.toLowerCase().includes(text.toLowerCase())
         );
-        // show max only 6 suggestions 
         setSuggestions(filtered.slice(0, 6));
-        // hide the dropdown if nothing matches
         setShowSuggestions(filtered.length > 0);
 
         } else {
@@ -48,20 +40,17 @@ const BreedAutocomplete: React.FC<BreedAutocompleteProps> = ({
         }
     };
 
-    // Handle when user taps a suggestion
     const handleSelectBreed = (breed: string) => {
         onChangeText(breed);
         setShowSuggestions(false);
         setSuggestions([]);
     };
 
-    // Input loses focus if user taps elsewhere
     const handleBlur = () => {
         // a small delay so a suggestion tap registers before the dropdown closes
         setTimeout(() => setShowSuggestions(false), 200);
     };
 
-    // Render dropdown
     return (
         <View style={styles.wrapper}>
             <TextInput
@@ -76,7 +65,6 @@ const BreedAutocomplete: React.FC<BreedAutocompleteProps> = ({
                 autoComplete="off"
             />
 
-            {/* Only render when there are suggestions to show */}
             {showSuggestions && (
                 <View style={[styles.dropdown, dropdownAbove && styles.dropdownAbove]}>
                     {suggestions.map((breed, index) => (
@@ -84,9 +72,9 @@ const BreedAutocomplete: React.FC<BreedAutocompleteProps> = ({
                             key={breed}
                             style={[
                                 styles.suggestionItem,
-                                index === suggestions.length - 1 && styles.lastItem, 
+                                index === suggestions.length - 1 && styles.lastItem,
                             ]}
-                            onPress={() => handleSelectBreed(breed)}
+                            onPressIn={() => handleSelectBreed(breed)}
                             activeOpacity={0.7}
                             >
                             
@@ -99,7 +87,6 @@ const BreedAutocomplete: React.FC<BreedAutocompleteProps> = ({
     );
 };
 
-// styles 
 const styles = StyleSheet.create({
 
   wrapper: { 
