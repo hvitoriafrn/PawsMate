@@ -79,9 +79,12 @@ export default function LocationOnboardingScreen() {
                 return;
             }
 
-            const position = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.Balanced,
-            });
+            let position = await Location.getLastKnownPositionAsync();
+            if (!position) {
+                position = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.Balanced,
+                });
+            }
 
             const { latitude, longitude } = position.coords;
 
