@@ -1,4 +1,4 @@
-// utils/imageUpload.ts, in this file there are the helper functions to pick and upload images to Firebase Storage
+// Helper functions to pick and upload images to Firebase Storage
 
 import { storage } from '@/config/firebase';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,7 +11,6 @@ export async function pickAndUploadImage(
     onProgress?: (progress: number) => void,
 ): Promise<string | null> {
 
-    // Ask permision to open photo library
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return null;
 
@@ -26,13 +25,11 @@ export async function pickAndUploadImage(
 
     const localUri = result.assets[0].uri;
 
-    // Convert the file to bytes and then upload to Firebase
     const response = await fetch(localUri);
     const blob = await response.blob();
     const storageRef = ref(storage, storagePath);
     const uploadImage = uploadBytesResumable(storageRef, blob);
 
-    // Wait for the upload and then return the public URL in order to display the image
     return new Promise((resolve, reject) => {
         uploadImage.on(
             'state_changed', 
@@ -51,16 +48,16 @@ export async function pickAndUploadImage(
     });
 }
 
-// open and upload an image, 
+// open and upload an image,
 // doesn't upload immediately (for example when the user needs to pick and confirm multiple photos)
-export async function pickImage(): Promise<string | null> {
+export async function pickImage(options?: { allowsEditing?: boolean; aspect?: [number, number] }): Promise<string | null> {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return null;
 
     const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes:['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: options?.allowsEditing ?? true,
+        aspect: options?.aspect ?? [1, 1],
         quality: 0.8,
     });
 
@@ -68,7 +65,6 @@ export async function pickImage(): Promise<string | null> {
     return result.assets[0].uri;
 }
 
-// upload to Firebase and return the public URL
 export async function uploadImageToStorage(
     localUri: string,
     storagePath: string,
