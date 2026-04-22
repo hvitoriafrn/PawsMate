@@ -1,6 +1,3 @@
-// Here go the react hooks related to Firestore
-
-// Import the necessary modules
 import { getActivePets, getPetsByOwnerId } from '@/services/firebase/petService';
 import { getAllUsers, getUserById } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore';
@@ -12,25 +9,18 @@ import { useEffect, useState } from "react";
 interface UseActivePetsProps {
     maxDistance?: number;
 }
-// Fetches all the active pets (this is for the Explore screen)
-
 export const useActivePets = ({ maxDistance }: UseActivePetsProps = {}) => {
 
-    // the list of Pets from the database
     const [pets, setPets] = useState<Pet[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
-    const { profile } = useUserStore();
-   
+    const { profile, user } = useUserStore();
 
     // Re-fetch when the radius changes or when the user's own geopoint changes
-    // (like when a user updates their location from the profile screen)
     const geoKey = profile?.geopoint
         ? `${profile.geopoint.latitude},${profile.geopoint.longitude}`
         : null;
-
-    const { user } = useUserStore();
 
     useEffect(() => {
         if (user?.uid) fetchPets();
@@ -38,87 +28,72 @@ export const useActivePets = ({ maxDistance }: UseActivePetsProps = {}) => {
 
     const fetchPets = async () => {
         try {
-            // Starts loading
             setLoading(true);
-
-            // Clear errors 
             setError(null);
 
             const fetchedPets = await getActivePets();
 
-           // Skip distance filtering if no radius set, no geopoint, or geopoint is still
-           // the 0,0 placeholder set at signup before the user has added a real location
-           const hasRealLocation = profile?.geopoint &&
-               !(profile.geopoint.latitude === 0 && profile.geopoint.longitude === 0);
+            // Always read the latest profile from the store rather than relying on the
+            // render-time closure, preventing stale location data on Android where closures
+            // can outlive multiple renders before the effect re-runs
+            const currentProfile = useUserStore.getState().profile;
 
-           if (!maxDistance || !hasRealLocation) {
+            // Skip distance filtering if no radius set, or geopoint is still the 0,0
+            // placeholder set at signup before the user has added a real location
+            const hasRealLocation = currentProfile?.geopoint &&
+               !(currentProfile.geopoint.latitude === 0 && currentProfile.geopoint.longitude === 0);
+
+            if (!maxDistance || !hasRealLocation) {
                 setPets(fetchedPets);
                 console.log(`Fetched ${fetchedPets.length} pets (no location filter)`);
                 return;
-           }
-           
-           // filter pets by distance
+            }
+
             const petsWithDistance = await Promise.all(
                 fetchedPets.map(async (pet) => {
                     try {
-                        // Get the pet owner to access their location
                         const owner = await getUserById(pet.ownerId);
-                        // If no location, include pet?
                         if (!owner?.geopoint) {
-                            return { pet, distance: 0, includeAnyway: true};
+                            return { pet, distance: 0, includeAnyway: true };
                         }
-                        
+
                         const distance = calculateDistance(
-                            profile.geopoint.latitude,
-                            profile.geopoint.longitude,
+                            currentProfile.geopoint.latitude,
+                            currentProfile.geopoint.longitude,
                             owner.geopoint.latitude,
                             owner.geopoint.longitude
                         );
 
-                        return { pet, distance, includeAnyway: false};
+                        return { pet, distance, includeAnyway: false };
                     } catch (error) {
-                        console.error('Error getting owner for pet ${pet.id}:', error);
-                        // if there was an error getting the owner, show pet anyway
+                        console.error(`Error getting owner for pet ${pet.id}:`, error);
                         return { pet, distance: 0, includeAnyway: true };
                     }
                 })
             );
 
-            // Filter pet within the maxDistance radius
-            const filteredPets = petsWithDistance 
-            .filter(({ distance, includeAnyway }) =>
-                includeAnyway || distance <= maxDistance
-        )
-        .map(({ pet }) => pet);
+            const filteredPets = petsWithDistance
+                .filter(({ distance, includeAnyway }) => includeAnyway || distance <= maxDistance)
+                .map(({ pet }) => pet);
 
-        // Save filtered pets to state
-        setPets(filteredPets);
+            setPets(filteredPets);
+            console.log(`Fetched ${filteredPets.length}/${fetchedPets.length} pets within ${maxDistance}km`);
 
-        // Log to console
-        console.log(
-            `Fetched ${filteredPets.length}/${fetchedPets.length} pets within ${maxDistance}km`
-            );
-
-        } catch ( error: any) {
-            // if anything goes wrong
-            console.error('Error getting pets: ', error)
+        } catch (error: any) {
+            console.error('Error getting pets: ', error);
             setError(error.message || 'Failed to load pets');
-
         } finally {
-            // Stops loading
             setLoading(false);
         }
     };
 
     return {
-        pets, 
-        loading, 
+        pets,
+        loading,
         error,
-        refetch : fetchPets
+        refetch: fetchPets
     };
 };
-
-// Get a user by ID
 
 export const useUser = (userId: string | null) => {
 
@@ -126,25 +101,22 @@ export const useUser = (userId: string | null) => {
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Re-run when userId changes
     useEffect(() => {
         if (userId) {
             fetchUser();
         } else {
-            // Stops loading if there's no userId provided
             setLoading(false);
         }
     }, [userId]);
 
 
     const fetchUser = async () => {
-        if (!userId) return; 
+        if (!userId) return;
 
         try {
             setLoading(true);
             setError(null);
 
-            // Get user from Firestore
             const fetchedUser = await getUserById(userId);
             setUser(fetchedUser);
 
@@ -159,8 +131,6 @@ export const useUser = (userId: string | null) => {
 
     return { user, loading, error, refetch: fetchUser };
 };
-
-// Get all the pets belonging to one user
 
 export const useUserPets = (ownerId: string | null) => {
 
@@ -198,8 +168,6 @@ export const useUserPets = (ownerId: string | null) => {
     return { pets, loading, error, refetch: fetchPets };
 };
 
-// Fetch all the users in database 
-
 export const useAllUser = () => {
 
     const [users, setUsers] = useState<User[]>([]);
@@ -231,14 +199,11 @@ export const useAllUser = () => {
     return { users, loading, error, refetch: fetchUsers };
 };
 
-// 
 export const usePetWithOwner = (pet: Pet | null) => {
 
     const [owner, setOwner] = useState<User | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-
-    // Reload and get owner when pet changes
 
     useEffect(() => {
         if (pet) {
