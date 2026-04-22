@@ -55,8 +55,6 @@ const emptyEventForm = () => ({
 
 type EventFormState = ReturnType<typeof emptyEventForm>;
 
-// Component 
-
 export default function AdminScreen() {
     const { user, profile } = useUserStore();
 
@@ -93,6 +91,7 @@ export default function AdminScreen() {
     const [saving, setSaving] = useState(false);
     const [locationError, setLocationError] = useState('');
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [androidPickerMode, setAndroidPickerMode] = useState<'date' | 'time'>('date');
     const [tempDate, setTempDate] = useState(new Date());
 
     useFocusEffect(
@@ -496,7 +495,7 @@ export default function AdminScreen() {
                             <FormLabel text="Date & time" required />
                             <TouchableOpacity
                                 style={styles.dateBtn}
-                                onPress={() => { setTempDate(form.dateObj); setShowDatePicker(true); }}
+                                onPress={() => { setTempDate(form.dateObj); setAndroidPickerMode('date'); setShowDatePicker(true); }}
                             >
                                 <Text style={styles.dateBtnText}>
                                     {form.dateObj.toLocaleString('en-GB', {
@@ -511,17 +510,23 @@ export default function AdminScreen() {
                                 <Feather name="calendar" size={18} color="#999" />
                             </TouchableOpacity>
 
-                            {/* Android inline date picker */}
+                            {/* Android date/time pickers, two steps: date then time */}
                             {Platform.OS === 'android' && showDatePicker && (
                                 <DateTimePicker
                                     value={tempDate}
-                                    mode="datetime"
-                                    minimumDate={new Date()}
+                                    mode={androidPickerMode}
+                                    minimumDate={androidPickerMode === 'date' ? new Date() : undefined}
                                     onChange={(event, date) => {
                                         setShowDatePicker(false);
                                         if (event.type === 'set' && date) {
-                                            setForm(prev => ({ ...prev, dateObj: date }));
-                                            setTempDate(date);
+                                            if (androidPickerMode === 'date') {
+                                                setTempDate(date);
+                                                setAndroidPickerMode('time');
+                                                setShowDatePicker(true);
+                                            } else {
+                                                setForm(prev => ({ ...prev, dateObj: date }));
+                                                setTempDate(date);
+                                            }
                                         }
                                     }}
                                 />
@@ -589,7 +594,7 @@ export default function AdminScreen() {
                                 <TouchableOpacity
                                     style={styles.imagePickerBtn}
                                     onPress={async () => {
-                                        const uri = await pickImage();
+                                        const uri = await pickImage({ allowsEditing: false });
                                         if (!uri) return;
                                         setSaving(true);
                                         try {
