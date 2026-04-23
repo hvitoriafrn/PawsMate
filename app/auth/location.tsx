@@ -28,7 +28,7 @@ type Step = 'consent' | 'choose' | 'manual' | 'saving' | 'done';
 
 export default function LocationOnboardingScreen() {
     const router = useRouter();
-    const { user } = useUserStore();
+    const { user, setProfile } = useUserStore();
 
     const [step, setStep] = useState<Step>('consent');
     const [manualInput, setManualInput] = useState('');
@@ -37,7 +37,7 @@ export default function LocationOnboardingScreen() {
     const [isBusy, setIsBusy] = useState(false);
 
     // Save coordinates to Firestore then navigate to the main app
-    const saveAndProceed = async (lat: number, lon: number, displayName: string) => {
+    const saveAndProceed = async (lat: number, lon: number, displayName: string, locationShared?: boolean) => {
         if (!user?.uid) {
             Alert.alert('Error', 'User not found. Please try signing in again.');
             return;
@@ -47,7 +47,13 @@ export default function LocationOnboardingScreen() {
         setStep('saving');
 
         try {
-            await updateUserLocation(user.uid, lat, lon, displayName);
+            await updateUserLocation(user.uid, lat, lon, displayName, locationShared);
+            // Update the store directly from known-good values, avoids a Firestore
+            // re-read that can race against the write or return stale cache on iOS
+            const currentProfile = useUserStore.getState().profile;
+            if (currentProfile) {
+                setProfile({ ...currentProfile, geopoint: { latitude: lat, longitude: lon }, location: displayName, locationShared: locationShared ?? false });
+            }
             setSavedLocation(displayName);
             setStep('done');
 
@@ -91,7 +97,7 @@ export default function LocationOnboardingScreen() {
             // Reverse geocode using Nominatim for the readable display name
             const displayName = await reverseGeocode(latitude, longitude);
 
-            await saveAndProceed(latitude, longitude, displayName);
+            await saveAndProceed(latitude, longitude, displayName, true);
 
         } catch (error) {
             console.error('GPS error:', error);
@@ -166,7 +172,7 @@ export default function LocationOnboardingScreen() {
                     <Text style={styles.gdprLegal}>UK GDPR Article 13 notice</Text>
 
                     <View style={styles.gdprItems}>
-                        <GdprItem icon="user"        text="Controller: PawsMate (dissertation project)" />
+                        <GdprItem icon="user"        text="Controller: PawsMate (final year project)" />
                         <GdprItem icon="map-pin"     text="Purpose: Show nearby pets and events, and calculate distances between owners" />
                         <GdprItem icon="check-circle" text="Legal basis: Your consent (Art. 6(1)(a) UK GDPR)" />
                         <GdprItem icon="lock"        text="Your precise coordinates are never shared. Only approximate distance is shown to others" />
