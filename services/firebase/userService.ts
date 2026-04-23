@@ -5,6 +5,7 @@ import {
     doc,
     GeoPoint,
     getDoc,
+    getDocFromServer,
     getDocs,
     serverTimestamp,
     setDoc,
@@ -93,14 +94,15 @@ export const updateUserProfile = async (
   }
 };
 
-// Get user doc by ID
-export const getUserById = async (userId: string): Promise<User | null > => {
+// Get user doc by ID. Pass fromServer=true to bypass the local cache (e.g. right
+// after a write, to ensure the latest geopoint is returned on all platforms).
+export const getUserById = async (userId: string, fromServer = false): Promise<User | null > => {
 
     try {
-        // Create a reference to the user doc
         const userRef = doc(db, COLLECTIONS.USERS, userId);
-        // Gets the doc from Firestore
-        const userSnap = await getDoc(userRef);
+        const userSnap = fromServer
+            ? await getDocFromServer(userRef)
+            : await getDoc(userRef);
 
         if (userSnap.exists()) {
             // if document exists, gets the data
@@ -151,26 +153,32 @@ export const TimestampToDate = (timestamp: any): Date => {
     return new Date();
 };
 
-// Create or update user with location data:
+// Create or update user with location data.
+// Pass locationShared=true when the user explicitly enables GPS sharing via the
+// profile toggle, false when they disable it. Omit it for manual location edits
+// (profile form, onboarding text entry) so the toggle state is left unchanged.
 export const updateUserLocation = async (
     userId: string,
     latitude: number,
     longitude: number,
-    locationString?: string
+    locationString?: string,
+    locationShared?: boolean,
 ): Promise<void> => {
-
     try {
         const userRef = doc(db, 'users', userId);
 
-        await updateDoc(userRef, {
-        // Store as Firestore geopoint
-        geopoint: new GeoPoint(latitude,longitude),
-        // Store readable location (for display)
-        location: locationString || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-        updatedAt: serverTimestamp(),
-    });
+        const update: Record<string, any> = {
+            geopoint: new GeoPoint(latitude, longitude),
+            location: locationString || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+            updatedAt: serverTimestamp(),
+        };
 
-    console.log('User location updated');
+        if (locationShared !== undefined) {
+            update.locationShared = locationShared;
+        }
+
+        await updateDoc(userRef, update);
+        console.log('User location updated');
     } catch (error) {
         console.error('Error updating location: ', error);
         throw error;
