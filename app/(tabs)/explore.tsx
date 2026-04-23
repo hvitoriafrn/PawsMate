@@ -9,7 +9,7 @@ import { getPetsByOwnerId } from '@/services/firebase/petService';
 import { getUserById } from '@/services/firebase/userService';
 import { useUserStore } from '@/store/userStore';
 import { LookingFor, Pet, User } from '@/types/database';
-import { Feather } from '@expo/vector-icons';
+import { Feather, FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import {
@@ -25,6 +25,7 @@ import {
     Dimensions,
     Image,
     Modal,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -102,6 +103,18 @@ export default function ExploreScreen() {
     const [ownerLoading, setOwnerLoading] = useState<boolean>(false);
 
     const [userPetId, setUserPetId] = useState<string | null>(null);
+
+    // Tracks pets acted on this session. Used to guard against filterSeenPets
+    // overwriting advanceCard's removal when both run concurrently.
+    const sessionSeenRef = useRef<Set<string>>(new Set());
+
+    const [refreshing, setRefreshing] = useState(false);
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await refetchRef.current();
+        setRefreshing(false);
+    };
 
     const [showMatchModal, setShowMatchModal] = useState<boolean>(false);
     const [newMatchId, setNewMatchId] = useState<string | null>(null);
@@ -188,11 +201,11 @@ export default function ExploreScreen() {
                 // Check for all the pet ids the user has already liked or passed on
                 // using AsyncStorage first as it's faster
                 const seenIds = await getSeenPetIds(user.uid);
-                const unseen = pets.filter(pet => !seenIds.has(pet.id));
+                const unseen = pets.filter(
+                    pet => !seenIds.has(pet.id) && !sessionSeenRef.current.has(pet.id)
+                );
                 setUnseenPets(unseen);
-                // If currentIndex is past the end of the new list (e.g. after a
-                // location change shrinks the result set), reset to the beginning
-                setCurrentIndex(prev => (prev >= unseen.length ? 0 : prev));
+                setCurrentIndex(0);
             } catch (error) {
                 console.error('Error filtering seen pets:', error);
                 setUnseenPets(pets);
@@ -207,16 +220,26 @@ export default function ExploreScreen() {
 
     useEffect(() => {
         if (currentPet) {
+            setCurrentOwner(null);
+            setOwnerLoading(true);
             getOwner();
             setPhotoIndex(0);
+        } else {
+            setOwnerLoading(false);
         }
     }, [currentPet?.id]);
 
     const getOwner = async () => {
         if (!currentPet) return;
+        const petId = currentPet.id;
+        const ownerId = currentPet.ownerId;
         try {
-            setOwnerLoading(true);
-            const owner = await getUserById(currentPet.ownerId);
+            const owner = await getUserById(ownerId);
+            if (!owner) {
+                // Owner document missing, skip this pet so the stack keeps moving
+                advanceCard(petId);
+                return;
+            }
             setCurrentOwner(owner);
         } catch (error) {
             console.error('Error getting pet owner: ', error);
@@ -236,8 +259,9 @@ export default function ExploreScreen() {
         }
     };
 
-    const advanceCard = () => {
-        setCurrentIndex(prev => prev + 1);
+    const advanceCard = (passedPetId: string) => {
+        sessionSeenRef.current.add(passedPetId);
+        setUnseenPets(prev => prev.filter(p => p.id !== passedPetId));
         setPhotoIndex(0);
     };
 
@@ -256,11 +280,12 @@ export default function ExploreScreen() {
             return;
         }
 
-        await markPetAsSeen(user.uid, currentPet.id);
+        const passedId = currentPet.id;
+        await markPetAsSeen(user.uid, passedId);
         try {
             await createLike(
                 user.uid,
-                currentPet.id,
+                passedId,
                 currentPet.ownerId,
                 userPetId,
                 'pass',
@@ -270,7 +295,7 @@ export default function ExploreScreen() {
             console.error('Error saving the pass: ', error);
         }
 
-       advanceCard();
+        advanceCard(passedId);
     };
 
     // Handle the like functionality
@@ -288,12 +313,14 @@ export default function ExploreScreen() {
             );
             return;
         }
-        await markPetAsSeen(user.uid, currentPet.id);
+
+        const likedId = currentPet.id;
+        await markPetAsSeen(user.uid, likedId);
 
         try {
              await createLike(
                 user.uid,
-                currentPet.id,
+                likedId,
                 currentPet.ownerId,
                 userPetId,
                 'like'
@@ -305,27 +332,25 @@ export default function ExploreScreen() {
                 user.uid,
                 userPetId,
                 currentPet.ownerId,
-                currentPet.id
+                likedId
             );
 
             if (matchId) {
                 setNewMatchId(matchId);
                 setShowMatchModal(true);
-                // don't change the card as the user needs to acknowledge the modal
+                // advance happens when user dismisses the modal
                 return;
             }
         } catch (error) {
             console.error('Error saving the like: ', error);
         }
-        advanceCard();
+        advanceCard(likedId);
     };
 
     const handleGoToChat = () => {
+        const petId = currentPet?.id;
         setShowMatchModal(false);
-        setCurrentIndex(prev => prev + 1);
-        console.log('handleGoToChat called');
-        console.log('newMatchId:', newMatchId);
-        console.log('currentPet:', currentPet?.id);
+        if (petId) advanceCard(petId);
 
         if (newMatchId && currentPet) {
             router.push({
@@ -335,13 +360,13 @@ export default function ExploreScreen() {
                     otherUserId: currentPet.ownerId
                 }
             } as any);
-
         }
     };
 
     const handleDismissMatch = () => {
+        const petId = currentPet?.id;
         setShowMatchModal(false);
-        advanceCard();
+        if (petId) advanceCard(petId);
     };
 
     // Reset the card stack whenever the client-side filters change
@@ -394,10 +419,13 @@ export default function ExploreScreen() {
                 </View>
 
                 {/* content area */}
-                <ScrollView 
+                <ScrollView
                     style={styles.scrollContainer}
-                    contentContainerStyle = {styles.cardContainer}
-                    showsVerticalScrollIndicator = {false}
+                    contentContainerStyle={styles.cardContainer}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                    }
                     >
                         {loading || seenLoading ? (
                             <View style={styles.loadingState}>
@@ -447,7 +475,6 @@ export default function ExploreScreen() {
                                         {/* Verified badge (top left) */}
                                         {currentPet.verification.verified && (
                                             <View style={styles.verifiedBadge}>
-                                                <View style={styles.verifiedDot}/>
                                                 <Text style={styles.verifiedText}>✓ Verified</Text>
                                         </View>
                                         )}
@@ -563,13 +590,13 @@ export default function ExploreScreen() {
                                 style={styles.likeButton}
                                 onPress={handleLike}
                             >
-                                <Text style={styles.likeIcon}> ♥ </Text>
+                                <FontAwesome name="heart" size={28} color="#fff" />
                             </TouchableOpacity>
                         </View>
                     </> 
 
-                ) : /* No more pets or owner loading */
-                ownerLoading ? (
+                ) : currentPet ? (
+                    // Pet exists but owner is still loading, show spinner instead of empty state
                         <View style={styles.centeredState}>
                             <ActivityIndicator size="large" color="#F2B949" />
                             <Text style={styles.loadingText}>Loading...</Text>
@@ -587,8 +614,7 @@ export default function ExploreScreen() {
                         </Text>
                         <Text style={styles.emptyStateText}>
                             {displayPets.length === 0 && unseenPets.length === 0
-                                ? `No pets found within ${activeRadius} km. 
-                                Try increasing the search radius in filters.`
+                                ? `No pets found within ${activeRadius} km.\nTry increasing the search radius in filters.`
                                 : 'Check back soon for new profiles!'}
                         </Text>
                         {/* Button to check if new pets were added */}
@@ -616,7 +642,7 @@ export default function ExploreScreen() {
         <View style={styles.modalOverlay}>
             <View style={styles.matchCard}>
                 <View style={styles.matchIconWrap}>
-                    <Feather name="heart" size={32} color="#111" />
+                    <FontAwesome name="heart" size={32} color="#fff" />
                 </View>
                 <Text style={styles.matchTitle}>It's a Match!</Text>
                 <Text style={styles.matchSubtitle}>
@@ -840,13 +866,6 @@ const styles = StyleSheet.create ({
         gap: 4,
     },
     
-    verifiedDot: {
-        width: 7,
-        height: 7, 
-        borderRadius: 4,
-        backgroundColor: '#fff',
-    },
-
     verifiedText: {
         color: 'white',
         fontSize: 12,
