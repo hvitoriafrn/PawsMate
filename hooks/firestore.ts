@@ -53,15 +53,19 @@ export const useActivePets = ({ maxDistance }: UseActivePetsProps = {}) => {
                 fetchedPets.map(async (pet) => {
                     try {
                         const owner = await getUserById(pet.ownerId);
-                        if (!owner?.geopoint) {
+                        const ownerGeo = owner?.geopoint;
+                        const ownerHasLocation = ownerGeo &&
+                            !(ownerGeo.latitude === 0 && ownerGeo.longitude === 0);
+
+                        if (!ownerHasLocation) {
                             return { pet, distance: 0, includeAnyway: true };
                         }
 
                         const distance = calculateDistance(
                             currentProfile.geopoint.latitude,
                             currentProfile.geopoint.longitude,
-                            owner.geopoint.latitude,
-                            owner.geopoint.longitude
+                            ownerGeo.latitude,
+                            ownerGeo.longitude
                         );
 
                         return { pet, distance, includeAnyway: false };
