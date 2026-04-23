@@ -13,7 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -48,10 +48,18 @@ export default function ProfileScreen() {
     const [bannerUri, setBannerUri] = useState<string | null>(null);
     const [uploadingBanner, setUploadingBanner] = useState(false);
 
-    // Derive from geopoint, {0,0} means no location set
-    const hasRealLocation = !!(user?.geopoint &&
-        !(user.geopoint.latitude === 0 && user.geopoint.longitude === 0));
-    const [locationEnabled, setLocationEnabled] = useState(hasRealLocation);
+    const [locationEnabled, setLocationEnabled] = useState(false);
+    const locationInitialized = useRef(false);
+
+    // Initialize the toggle once when user data first loads.
+    // Reads locationShared (set only via the GPS toggle) so manual location
+    // edits never flip the toggle state.
+    useEffect(() => {
+        if (!locationInitialized.current && user !== null) {
+            locationInitialized.current = true;
+            setLocationEnabled(user.locationShared === true);
+        }
+    }, [user]);
     const [locationUpdating, setLocationUpdating] = useState(false);
 
     const [refreshing, setRefreshing] = useState(false);
@@ -136,12 +144,14 @@ export default function ProfileScreen() {
                     return;
                 }
 
-                // Update location on the user doc and on all their pets so distance filtering stays correct
-                await updateUserLocation(authUser.uid, coords.latitude, coords.longitude, editedLocation.trim());
+                // Reverse-geocode so we store an area name, not the raw input
+                // (important if the user typed a postcode, we never want to display that)
+                const displayName = await reverseGeocode(coords.latitude, coords.longitude);
+                await updateUserLocation(authUser.uid, coords.latitude, coords.longitude, displayName);
                 await updatePetsOwnerGeopoint(authUser.uid, coords.latitude, coords.longitude);
 
                 // Sync updated geopoint into the Zustand store so explore re-filters immediately
-                const refreshed = await getUserById(authUser.uid);
+                const refreshed = await getUserById(authUser.uid, true);
                 if (refreshed) setProfile(refreshed);
             }
 
@@ -531,20 +541,34 @@ export default function ProfileScreen() {
                                                 );
                                                 return;
                                             }
-                                            const pos = await Location.getCurrentPositionAsync({});
+                                            // getLastKnownPositionAsync is faster on Android and avoids
+                                            // the timeout that can occur with getCurrentPositionAsync cold
+                                            let pos = await Location.getLastKnownPositionAsync();
+                                            if (!pos) {
+                                                pos = await Location.getCurrentPositionAsync({
+                                                    accuracy: Location.Accuracy.Balanced,
+                                                });
+                                            }
                                             const { latitude, longitude } = pos.coords;
                                             const displayName = await reverseGeocode(latitude, longitude);
-                                            await updateUserLocation(authUser.uid, latitude, longitude, displayName);
+                                            await updateUserLocation(authUser.uid, latitude, longitude, displayName, true);
                                             await updatePetsOwnerGeopoint(authUser.uid, latitude, longitude);
-                                            const refreshed = await getUserById(authUser.uid);
-                                            if (refreshed) setProfile(refreshed);
+                                            // Update store directly so explore re-filters immediately
+                                            const currentProfile = useUserStore.getState().profile;
+                                            if (currentProfile) {
+                                                setProfile({ ...currentProfile, geopoint: { latitude, longitude }, location: displayName });
+                                            }
+                                            await refetchUser();
                                             setLocationEnabled(true);
                                         } else {
                                             // Reset geopoint to {0,0} treated as "no location" everywhere
-                                            await updateUserLocation(authUser.uid, 0, 0, '');
+                                            await updateUserLocation(authUser.uid, 0, 0, '', false);
                                             await updatePetsOwnerGeopoint(authUser.uid, 0, 0);
-                                            const refreshed = await getUserById(authUser.uid);
-                                            if (refreshed) setProfile(refreshed);
+                                            const currentProfile = useUserStore.getState().profile;
+                                            if (currentProfile) {
+                                                setProfile({ ...currentProfile, geopoint: { latitude: 0, longitude: 0 }, location: '' });
+                                            }
+                                            await refetchUser();
                                             setLocationEnabled(false);
                                         }
                                     } catch (error) {
