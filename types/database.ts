@@ -64,6 +64,7 @@ export interface User {
     termsAccepted: boolean,
     termsAcceptedAt: string,
     isAdmin?: boolean;
+    locationShared?: boolean;
 }
 
 // Represent the pet profile
